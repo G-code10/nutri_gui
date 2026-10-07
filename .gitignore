@@ -1,0 +1,9 @@
+/data
+.venv
+*.pyc
+.pytest_cache
+__pycache__
+# Afin de pouvoir travailler avec les brouillons à jour, ces lignes sont commentées
+# /notesbooks/christian
+# /notesbooks/guillaume
+# /notesbooks/jeremy
