@@ -14,3 +14,6 @@ Renseigné les valeurs vides sur la majorité des colonnes dans le perimetre.
 Il faudra vérifier les colonnes s'approchant des 0% de valeur nulles, ceci est surement dû au fait que la colonnes ont un formattage pré-établi, il faudra éclater la structure et récupérer les valeurs nulles présentes sur les différents éléments de la structure.
 
 ## 
+
+## TP9 - Nettoyage industrialisé
+

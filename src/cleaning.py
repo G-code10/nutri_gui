@@ -81,7 +81,7 @@ DEFAULT_MISSING_STRATEGY = {
     "energy_kcal_100g": "median_by_group",  # drapeau posé après les dérivations par derive_missing_energy
     "salt_100g": "keep",                    # dérivé du sodium (relation exacte)
     "sodium_100g": "keep",
-    "allergens": "keep",                    # drapeau posé par flag_allergens_unknown
+    "allergens": "keep",                    # drapeau posé par handle_allergens_unknown
     "serving_size": "keep",
     "completeness": "keep",
     "nutriscore_score": "keep",
@@ -141,6 +141,16 @@ def _recompute_energy(res: pd.DataFrame, mask: pd.Series) -> None:
     new_kcal = _atwater_kcal(res).round(1)
     res["energy_kcal_100g"] = res["energy_kcal_100g"].mask(mask, new_kcal)
     res["energy_kj_100g"] = res["energy_kj_100g"].mask(mask, (new_kcal * KJ_PER_KCAL).round(1))
+
+
+def _invalidate_energy(res: pd.DataFrame, mask: pd.Series) -> None:
+    """Passe kcal ET kJ à NA sur les lignes du masque (modifie `res`, une copie).
+
+    Les deux valeurs sont suspectes : garder les kJ laisserait derive_missing_energy refaire les kcal
+    depuis eux, et la règle se déclencherait de nouveau à chaque passage (idempotence).
+    """
+    res["energy_kcal_100g"] = res["energy_kcal_100g"].mask(mask)
+    res["energy_kj_100g"] = res["energy_kj_100g"].mask(mask)
 
 
 def _capitalize_first_letter(text: str) -> str:
@@ -397,7 +407,10 @@ def missing_strategy(
     for column, tokens in parsed.items():
         for token in tokens:
             if token == "flag":
-                res[f"{column}_missing"] = res[column].isna().astype("boolean")
+                # Un drapeau déjà posé est conservé : une règle ultérieure a pu remplir la valeur (idempotence)
+                flag_name = f"{column}_missing"
+                previous = res[flag_name].fillna(False).astype(bool) if flag_name in res.columns else False
+                res[flag_name] = (res[column].isna() | previous).astype("boolean")
                 counts["flags_set"] += 1
             elif token.startswith("constant:"):
                 value = token.split(":", 1)[1]
@@ -429,20 +442,8 @@ def fill_saturated_zero_if_low_fat(df: pd.DataFrame) -> tuple[pd.DataFrame, Rule
     return res, _report("fill_saturated_zero_if_low_fat", df, res, to_zero, set_to_zero=to_zero.sum())
 
 
-def drop_rows_without_key_nutrient(
-    df: pd.DataFrame, columns: list[str] = KEY_NUTRIENTS
-) -> tuple[pd.DataFrame, RuleReport]:
-    """11. Supprime les lignes dont toutes les composantes du score sont manquantes."""
-    mask = df[columns].isna().all(axis=1)
-    res = df.loc[~mask].reset_index(drop=True)
-    return res, _report(
-        "drop_rows_without_key_nutrient", df, res, mask,  # lignes touchées = lignes supprimées
-        rows_dropped=mask.sum(),
-    )
-
-
 def reconcile_salt_sodium(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """12. Sel et sodium : relation exacte sel = sodium × 2,5 (valeurs déjà bornées par l'étape 6).
+    """11. Sel et sodium : relation exacte sel = sodium × 2,5 (valeurs déjà bornées par l'étape 6).
 
     1) Écart > 0,1 entre les deux : le sodium est recalculé depuis le sel, qui fait référence.
     2) Un des deux manquant : il est dérivé de l'autre.
@@ -467,7 +468,7 @@ def reconcile_salt_sodium(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
 
 
 def reconcile_kcal_kj(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """13. Unités d'énergie : si kJ / kcal sort de [3,9 ; 4,5], les kcal sont recalculées depuis les kJ.
+    """12. Unités d'énergie : si kJ / kcal sort de [3,9 ; 4,5], les kcal sont recalculées depuis les kJ.
 
     Ne touche que les lignes où kcal et kJ sont présentes et strictement positives. Les kcal nulles
     sont laissées à fix_inconsistent_energy, et les kcal absentes à derive_missing_energy.
@@ -493,14 +494,14 @@ def reconcile_kcal_kj(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
 
 
 def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """14. Énergie incohérente avec le calcul 4/4/9 : recalcul, kJ réalignés ; recalcul impossible -> kcal en NA.
+    """13. Énergie incohérente avec le calcul 4/4/9 : recalcul, kJ réalignés ; recalcul impossible -> kcal et kJ en NA.
 
     1) Énergie nulle alors qu'un macronutriment est positif.
     2) Énergie non nulle à plus de 50 % du calcul 4/4/9 (calcul >= 50 kcal).
     Exception : boissons alcoolisées, laissées intactes. Une valeur déclarée est remplacée par une
     approximation (Atwater ignore fibres et polyols), ce que le TP demande ; si le calcul est impossible
-    (macronutriment manquant, calcul hors de [0, 900]), les kcal deviennent NA et seront redérivées
-    plus tard par derive_missing_energy.
+    (macronutriment manquant, calcul hors de [0, 900]), les kcal et les kJ deviennent NA ; les kcal pourront être redérivées
+    plus tard par derive_missing_energy, à partir des macronutriments seulement.
     """
     res = df.copy()
     carbs, proteins, fat = res["carbohydrates_100g"], res["proteins_100g"], res["fat_100g"]
@@ -513,7 +514,7 @@ def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]
     zero_flagged = (zero_with_macros & not_alcohol).fillna(False).astype(bool)
     zero_fix, zero_invalid = zero_flagged & computable, zero_flagged & ~computable
     _recompute_energy(res, zero_fix)
-    res["energy_kcal_100g"] = res["energy_kcal_100g"].mask(zero_invalid)
+    _invalidate_energy(res, zero_invalid)
 
     kcal = res["energy_kcal_100g"]
     deviating = (
@@ -523,13 +524,29 @@ def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]
     deviation_flagged = (deviating & not_alcohol).fillna(False).astype(bool)
     deviation_fix, deviation_invalid = deviation_flagged & computable, deviation_flagged & ~computable
     _recompute_energy(res, deviation_fix)
-    res["energy_kcal_100g"] = res["energy_kcal_100g"].mask(deviation_invalid)
+    _invalidate_energy(res, deviation_invalid)
 
     touched = zero_fix | zero_invalid | deviation_fix | deviation_invalid
     return res, _report(
         "fix_inconsistent_energy", df, res, touched,
         zero_recomputed=zero_fix.sum(), zero_invalidated=zero_invalid.sum(),
         deviation_recomputed=deviation_fix.sum(), deviation_invalidated=deviation_invalid.sum(),
+    )
+
+
+def drop_rows_without_key_nutrient(
+    df: pd.DataFrame, columns: list[str] = KEY_NUTRIENTS
+) -> tuple[pd.DataFrame, RuleReport]:
+    """14. Supprime les lignes dont toutes les composantes du score sont manquantes.
+
+    Placée après fix_inconsistent_energy, qui peut invalider les dernières valeurs d'une ligne (idempotence),
+    et avant derive_missing_energy, qui ne doit pas faire revivre une ligne sans nutriment clé.
+    """
+    mask = df[columns].isna().all(axis=1)
+    res = df.loc[~mask].reset_index(drop=True)
+    return res, _report(
+        "drop_rows_without_key_nutrient", df, res, mask,  # lignes touchées = lignes supprimées
+        rows_dropped=mask.sum(),
     )
 
 
@@ -578,9 +595,9 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, list[RuleReport]]:
     run(handle_allergens_unknown)
     run(missing_strategy)
     run(fill_saturated_zero_if_low_fat)
-    run(drop_rows_without_key_nutrient)
     run(reconcile_salt_sodium)
     run(reconcile_kcal_kj)
     run(fix_inconsistent_energy)
+    run(drop_rows_without_key_nutrient)
     run(derive_missing_energy)
     return df, reports
