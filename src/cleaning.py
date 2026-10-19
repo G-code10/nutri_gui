@@ -10,8 +10,6 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
-pd.options.mode.copy_on_write = True
-
 # --- Constantes métier ---
 KJ_PER_KCAL = 4.184
 SALT_PER_SODIUM = 2.5
@@ -151,6 +149,14 @@ def _invalidate_energy(res: pd.DataFrame, mask: pd.Series) -> None:
     """
     res["energy_kcal_100g"] = res["energy_kcal_100g"].mask(mask)
     res["energy_kj_100g"] = res["energy_kj_100g"].mask(mask)
+
+
+def _effective_kcal(df: pd.DataFrame) -> pd.Series:
+    """Kcal déclarées, sinon celles que derive_missing_energy tirera des kJ (kJ / 4,184, arrondi à 0,1).
+
+    Permet à fix_inconsistent_energy de contrôler dès la première passe des kcal qui n'existent pas encore.
+    """
+    return df["energy_kcal_100g"].fillna((df["energy_kj_100g"] / KJ_PER_KCAL).round(1))
 
 
 def _capitalize_first_letter(text: str) -> str:
@@ -327,10 +333,61 @@ def drop_unclassifiable(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
     )
 
 
+def reconcile_salt_sodium(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
+    """6. Sel et sodium : relation exacte sel = sodium × 2,5, avant le bornage (étape 8) : un sel dérivé est borné ensuite.
+
+    1) Écart > 0,1 entre les deux : le sodium est recalculé depuis le sel, qui fait référence.
+    2) Un des deux manquant : il est dérivé de l'autre.
+    """
+    res = df.copy()
+    salt, sodium = res["salt_100g"], res["sodium_100g"]
+
+    inconsistent = (
+        salt.notna() & sodium.notna()
+        & ((salt - SALT_PER_SODIUM * sodium).abs() > SALT_SODIUM_TOLERANCE)
+    )
+    sodium = sodium.mask(inconsistent, salt / SALT_PER_SODIUM)
+
+    salt_derived = salt.isna() & sodium.notna()
+    sodium_derived = sodium.isna() & salt.notna()
+    res["salt_100g"] = salt.mask(salt_derived, sodium * SALT_PER_SODIUM)
+    res["sodium_100g"] = sodium.mask(sodium_derived, salt / SALT_PER_SODIUM)
+    return res, _report(
+        "reconcile_salt_sodium", df, res, inconsistent | salt_derived | sodium_derived,
+        sodium_recomputed=inconsistent.sum(), salt_derived=salt_derived.sum(), sodium_derived=sodium_derived.sum(),
+    )
+
+
+def reconcile_kcal_kj(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
+    """7. Unités d'énergie : si kJ / kcal sort de [3,9 ; 4,5], les kcal sont recalculées depuis les kJ.
+
+    Ne touche que les lignes où kcal et kJ sont présentes et strictement positives. Les kcal nulles
+    sont laissées à fix_inconsistent_energy, et les kcal absentes à derive_missing_energy.
+    """
+    res = df.copy()
+    kcal, kj = res["energy_kcal_100g"], res["energy_kj_100g"]
+
+    ratio = kj / kcal
+    inconsistent = (
+        kcal.notna() & kj.notna() & (kcal > 0) & (kj > 0)
+        & ~ratio.between(KJ_KCAL_RATIO_MIN, KJ_KCAL_RATIO_MAX)
+    )
+
+    new_kcal = (kj / KJ_PER_KCAL).round(1)
+    # Compté seulement si la valeur change (l'arrondi peut laisser un rapport hors plage sur de très petites valeurs)
+    changed = (inconsistent & (new_kcal != kcal)).fillna(False).astype(bool)
+
+    res["energy_kcal_100g"] = kcal.mask(changed, new_kcal)
+    return res, _report(
+        "reconcile_kcal_kj", df, res, changed,
+        ratio_inconsistent=inconsistent.sum(), kcal_recomputed=changed.sum(),
+    )
+
+
 def neutralize_range(
     df: pd.DataFrame, column: str, low: float, high: float
 ) -> tuple[pd.DataFrame, RuleReport]:
-    """6. Garde-fou : valeurs de `column` hors de [low, high] neutralisées en NA, jamais imputées."""
+    """8. Garde-fou : valeurs de `column` hors de [low, high] neutralisées en NA, jamais imputées."""
     res = df.copy()
     values = res[column]
     invalid = values.notna() & ~values.between(low, high)
@@ -339,7 +396,7 @@ def neutralize_range(
 
 
 def neutralize_subpart_above_total(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """7. Sous-partie supérieure à son total (+ tolérance de 0,5) -> NA, jamais imputée.
+    """9. Sous-partie supérieure à son total (+ tolérance de 0,5) -> NA, jamais imputée.
 
     Sucres > glucides, et saturées > lipides : les sucres sont une sous-partie des glucides,
     les saturées une sous-partie du fat. Le total reste inchangé.
@@ -360,7 +417,7 @@ def neutralize_subpart_above_total(df: pd.DataFrame) -> tuple[pd.DataFrame, Rule
 
 
 def handle_allergens_unknown(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """8. Allergènes : NULL, ou chaîne vide sans ingrédients = inconnu (drapeau allergens_missing, chaîne vide -> NA).
+    """10. Allergènes : NULL, ou chaîne vide sans ingrédients = inconnu (drapeau allergens_missing, chaîne vide -> NA).
 
     Une chaîne vide avec ingrédients connus veut dire « aucun allergène déclaré » : elle est conservée.
     Le drapeau est calculé avant l'effacement des chaînes vides.
@@ -384,7 +441,7 @@ def handle_allergens_unknown(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport
 def missing_strategy(
     df: pd.DataFrame, strategy: dict[str, str] = DEFAULT_MISSING_STRATEGY
 ) -> tuple[pd.DataFrame, RuleReport]:
-    """9. Stratégie de manquants : applique la décision de chaque colonne (dictionnaire, vocabulaire fermé).
+    """11. Stratégie de manquants : applique la décision de chaque colonne (dictionnaire, vocabulaire fermé).
 
     Décisions : keep, flag (colonne <col>_missing), constant:<valeur>, drop_column, et median_by_group / mode
     (reconnues mais non appliquées ici : imputation statistique, réservée au pipeline ML après le split).
@@ -430,10 +487,10 @@ def missing_strategy(
 
 
 def fill_saturated_zero_if_low_fat(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """10. Saturées manquantes = 0 si fat < 0,5 g : déduction exacte (les saturées sont une sous-partie du fat).
+    """12. Saturées manquantes = 0 si fat < 0,5 g : déduction exacte (les saturées sont une sous-partie du fat).
 
-    Le drapeau saturated_fat_100g_missing, posé à l'étape 9, garde la trace du manque d'origine.
-    Les saturées neutralisées aux étapes 6 et 7 sont aussi concernées : fat < 0,5 g borne les saturées.
+    Le drapeau saturated_fat_100g_missing, posé à l'étape 11, garde la trace du manque d'origine.
+    Les saturées neutralisées aux étapes 8 et 9 sont aussi concernées : fat < 0,5 g borne les saturées.
     """
     res = df.copy()
     sat, fat = res["saturated_fat_100g"], res["fat_100g"]
@@ -442,62 +499,13 @@ def fill_saturated_zero_if_low_fat(df: pd.DataFrame) -> tuple[pd.DataFrame, Rule
     return res, _report("fill_saturated_zero_if_low_fat", df, res, to_zero, set_to_zero=to_zero.sum())
 
 
-def reconcile_salt_sodium(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """11. Sel et sodium : relation exacte sel = sodium × 2,5 (valeurs déjà bornées par l'étape 6).
-
-    1) Écart > 0,1 entre les deux : le sodium est recalculé depuis le sel, qui fait référence.
-    2) Un des deux manquant : il est dérivé de l'autre.
-    """
-    res = df.copy()
-    salt, sodium = res["salt_100g"], res["sodium_100g"]
-
-    inconsistent = (
-        salt.notna() & sodium.notna()
-        & ((salt - SALT_PER_SODIUM * sodium).abs() > SALT_SODIUM_TOLERANCE)
-    )
-    sodium = sodium.mask(inconsistent, salt / SALT_PER_SODIUM)
-
-    salt_derived = salt.isna() & sodium.notna()
-    sodium_derived = sodium.isna() & salt.notna()
-    res["salt_100g"] = salt.mask(salt_derived, sodium * SALT_PER_SODIUM)
-    res["sodium_100g"] = sodium.mask(sodium_derived, salt / SALT_PER_SODIUM)
-    return res, _report(
-        "reconcile_salt_sodium", df, res, inconsistent | salt_derived | sodium_derived,
-        sodium_recomputed=inconsistent.sum(), salt_derived=salt_derived.sum(), sodium_derived=sodium_derived.sum(),
-    )
-
-
-def reconcile_kcal_kj(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """12. Unités d'énergie : si kJ / kcal sort de [3,9 ; 4,5], les kcal sont recalculées depuis les kJ.
-
-    Ne touche que les lignes où kcal et kJ sont présentes et strictement positives. Les kcal nulles
-    sont laissées à fix_inconsistent_energy, et les kcal absentes à derive_missing_energy.
-    """
-    res = df.copy()
-    kcal, kj = res["energy_kcal_100g"], res["energy_kj_100g"]
-
-    ratio = kj / kcal
-    inconsistent = (
-        kcal.notna() & kj.notna() & (kcal > 0) & (kj > 0)
-        & ~ratio.between(KJ_KCAL_RATIO_MIN, KJ_KCAL_RATIO_MAX)
-    )
-
-    new_kcal = (kj / KJ_PER_KCAL).round(1)
-    # Compté seulement si la valeur change (l'arrondi peut laisser un rapport hors plage sur de très petites valeurs)
-    changed = (inconsistent & (new_kcal != kcal)).fillna(False).astype(bool)
-
-    res["energy_kcal_100g"] = kcal.mask(changed, new_kcal)
-    return res, _report(
-        "reconcile_kcal_kj", df, res, changed,
-        ratio_inconsistent=inconsistent.sum(), kcal_recomputed=changed.sum(),
-    )
-
-
 def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
     """13. Énergie incohérente avec le calcul 4/4/9 : recalcul, kJ réalignés ; recalcul impossible -> kcal et kJ en NA.
 
     1) Énergie nulle alors qu'un macronutriment est positif.
     2) Énergie non nulle à plus de 50 % du calcul 4/4/9 (calcul >= 50 kcal).
+    Les kcal absentes sont contrôlées via les kJ (voir _effective_kcal), sinon la règle se déclencherait
+    à la seconde passe sur des kcal dérivées par la règle 15.
     Exception : boissons alcoolisées, laissées intactes. Une valeur déclarée est remplacée par une
     approximation (Atwater ignore fibres et polyols), ce que le TP demande ; si le calcul est impossible
     (macronutriment manquant, calcul hors de [0, 900]), les kcal et les kJ deviennent NA ; les kcal pourront être redérivées
@@ -510,13 +518,13 @@ def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]
     calc = _atwater_kcal(res)
     computable = calc.between(0, KCAL_MAX).fillna(False).astype(bool)
 
-    zero_with_macros = (res["energy_kcal_100g"] == 0) & ((carbs > 0) | (proteins > 0) | (fat > 0))
+    zero_with_macros = (_effective_kcal(res) == 0) & ((carbs > 0) | (proteins > 0) | (fat > 0))
     zero_flagged = (zero_with_macros & not_alcohol).fillna(False).astype(bool)
     zero_fix, zero_invalid = zero_flagged & computable, zero_flagged & ~computable
     _recompute_energy(res, zero_fix)
     _invalidate_energy(res, zero_invalid)
 
-    kcal = res["energy_kcal_100g"]
+    kcal = _effective_kcal(res)
     deviating = (
         kcal.notna() & (kcal > 0) & (calc >= ENERGY_MIN_REFERENCE)
         & ((kcal - calc).abs() / calc > ENERGY_RELATIVE_TOLERANCE)
@@ -589,14 +597,14 @@ def clean(df: pd.DataFrame) -> tuple[pd.DataFrame, list[RuleReport]]:
     run(enforce_unique_code)
     run(normalize_grade)
     run(drop_unclassifiable)
+    run(reconcile_salt_sodium)
+    run(reconcile_kcal_kj)
     for column, (low, high) in RANGES.items():
         run(neutralize_range, column, low, high)
     run(neutralize_subpart_above_total)
     run(handle_allergens_unknown)
     run(missing_strategy)
     run(fill_saturated_zero_if_low_fat)
-    run(reconcile_salt_sodium)
-    run(reconcile_kcal_kj)
     run(fix_inconsistent_energy)
     run(drop_rows_without_key_nutrient)
     run(derive_missing_energy)

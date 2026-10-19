@@ -8,7 +8,7 @@ import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-import cleaning  # si le module est dans src/ : from src import cleaning
+from src import cleaning
 
 NA = np.nan
 
@@ -218,7 +218,49 @@ def test_drop_unclassifiable_tordu_null_et_liste_vide():
 
 
 # =====================================================================
-# 6. neutralize_range
+# 6. reconcile_salt_sodium
+# =====================================================================
+def test_reconcile_salt_sodium_nominal(raw):
+    res, report = cleaning.reconcile_salt_sodium(raw)
+    assert by_code(res, "1012")["salt_100g"] == pytest.approx(1.25)
+    assert report.details["salt_derived"] == 1
+
+
+def test_reconcile_salt_sodium_tordu():
+    df = small(
+        salt_100g=[1.0, 1.0, NA, 2.5],
+        sodium_100g=[0.1, 0.38, 0.0, NA],  # incohérent / dans la tolérance / zéro / manquant
+    )
+    res, _ = cleaning.reconcile_salt_sodium(df)
+    assert res["sodium_100g"].iloc[0] == pytest.approx(0.4)    # recalculé depuis le sel
+    assert res["sodium_100g"].iloc[1] == 0.38                  # écart de 0,05 : toléré
+    assert res["salt_100g"].iloc[2] == 0.0                     # sodium nul -> sel nul
+    assert res["sodium_100g"].iloc[3] == pytest.approx(1.0)    # sodium dérivé du sel
+
+
+# =====================================================================
+# 7. reconcile_kcal_kj
+# =====================================================================
+def test_reconcile_kcal_kj_nominal(raw):
+    res, report = cleaning.reconcile_kcal_kj(raw)
+    assert by_code(res, "1013")["energy_kcal_100g"] == pytest.approx(239.0)
+    assert by_code(res, "1000")["energy_kcal_100g"] == 60.0
+    assert report.details["kcal_recomputed"] == 1
+
+
+def test_reconcile_kcal_kj_tordu():
+    df = small(
+        energy_kcal_100g=[100.0, 0.0, NA, 100.0],
+        energy_kj_100g=[418.4, 100.0, 100.0, 390.0],  # cohérent / kcal nulles / kcal absentes / ratio 3,9 à la borne
+    )
+    res, _ = cleaning.reconcile_kcal_kj(df)
+    assert list(res["energy_kcal_100g"].iloc[:2]) == [100.0, 0.0]
+    assert pd.isna(res["energy_kcal_100g"].iloc[2])  # laissée à derive_missing_energy
+    assert res["energy_kcal_100g"].iloc[3] == 100.0  # ratio 3,9 : dans la plage
+
+
+# =====================================================================
+# 8. neutralize_range
 # =====================================================================
 def test_neutralize_range_nominal(raw):
     res, report = cleaning.neutralize_range(raw, "sugars_100g", 0, 100)
@@ -237,7 +279,7 @@ def test_neutralize_range_tordu_borne_exacte():
 
 
 # =====================================================================
-# 7. neutralize_subpart_above_total
+# 9. neutralize_subpart_above_total
 # =====================================================================
 def test_neutralize_subpart_above_total_nominal(raw):
     res, report = cleaning.neutralize_subpart_above_total(raw)
@@ -259,7 +301,7 @@ def test_neutralize_subpart_above_total_tordu_tolerance():
 
 
 # =====================================================================
-# 8. handle_allergens_unknown
+# 10. handle_allergens_unknown
 # =====================================================================
 def test_handle_allergens_unknown_nominal(raw):
     res, report = cleaning.handle_allergens_unknown(raw)
@@ -281,7 +323,7 @@ def test_handle_allergens_unknown_tordu():
 
 
 # =====================================================================
-# 9. missing_strategy
+# 11. missing_strategy
 # =====================================================================
 def test_missing_strategy_nominal(raw):
     res, report = cleaning.missing_strategy(raw)
@@ -319,7 +361,7 @@ def test_missing_strategy_mediane_differee():
 
 
 # =====================================================================
-# 10. fill_saturated_zero_if_low_fat
+# 12. fill_saturated_zero_if_low_fat
 # =====================================================================
 def test_fill_saturated_zero_if_low_fat_nominal(raw):
     res, report = cleaning.fill_saturated_zero_if_low_fat(raw)
@@ -336,67 +378,7 @@ def test_fill_saturated_zero_if_low_fat_tordu_seuil():
 
 
 # =====================================================================
-# 11. drop_rows_without_key_nutrient
-# =====================================================================
-def test_drop_rows_without_key_nutrient_nominal(raw):
-    res, report = cleaning.drop_rows_without_key_nutrient(raw)
-    assert "1011" not in set(res["code"])
-    assert report.details["rows_dropped"] == 1
-
-
-def test_drop_rows_without_key_nutrient_tordu_un_seul_suffit():
-    df = small(
-        energy_kcal_100g=[NA, NA], energy_kj_100g=[NA, NA], saturated_fat_100g=[NA, NA],
-        sugars_100g=[NA, NA], proteins_100g=[NA, NA], salt_100g=[NA, 0.0], sodium_100g=[NA, NA],
-    )
-    res, _ = cleaning.drop_rows_without_key_nutrient(df)
-    assert len(res) == 1  # un zéro est une valeur connue
-
-
-# =====================================================================
-# 12. reconcile_salt_sodium
-# =====================================================================
-def test_reconcile_salt_sodium_nominal(raw):
-    res, report = cleaning.reconcile_salt_sodium(raw)
-    assert by_code(res, "1012")["salt_100g"] == pytest.approx(1.25)
-    assert report.details["salt_derived"] == 1
-
-
-def test_reconcile_salt_sodium_tordu():
-    df = small(
-        salt_100g=[1.0, 1.0, NA, 2.5],
-        sodium_100g=[0.1, 0.38, 0.0, NA],  # incohérent / dans la tolérance / zéro / manquant
-    )
-    res, _ = cleaning.reconcile_salt_sodium(df)
-    assert res["sodium_100g"].iloc[0] == pytest.approx(0.4)    # recalculé depuis le sel
-    assert res["sodium_100g"].iloc[1] == 0.38                  # écart de 0,05 : toléré
-    assert res["salt_100g"].iloc[2] == 0.0                     # sodium nul -> sel nul
-    assert res["sodium_100g"].iloc[3] == pytest.approx(1.0)    # sodium dérivé du sel
-
-
-# =====================================================================
-# 13. reconcile_kcal_kj
-# =====================================================================
-def test_reconcile_kcal_kj_nominal(raw):
-    res, report = cleaning.reconcile_kcal_kj(raw)
-    assert by_code(res, "1013")["energy_kcal_100g"] == pytest.approx(239.0)
-    assert by_code(res, "1000")["energy_kcal_100g"] == 60.0
-    assert report.details["kcal_recomputed"] == 1
-
-
-def test_reconcile_kcal_kj_tordu():
-    df = small(
-        energy_kcal_100g=[100.0, 0.0, NA, 100.0],
-        energy_kj_100g=[418.4, 100.0, 100.0, 390.0],  # cohérent / kcal nulles / kcal absentes / ratio 3,9 à la borne
-    )
-    res, _ = cleaning.reconcile_kcal_kj(df)
-    assert list(res["energy_kcal_100g"].iloc[:2]) == [100.0, 0.0]
-    assert pd.isna(res["energy_kcal_100g"].iloc[2])  # laissée à derive_missing_energy
-    assert res["energy_kcal_100g"].iloc[3] == 100.0  # ratio 3,9 : dans la plage
-
-
-# =====================================================================
-# 14. fix_inconsistent_energy
+# 13. fix_inconsistent_energy
 # =====================================================================
 def test_fix_inconsistent_energy_nominal(raw):
     res, report = cleaning.fix_inconsistent_energy(raw)
@@ -431,6 +413,36 @@ def test_fix_inconsistent_energy_tordu_seuil_50_pourcent():
     res, _ = cleaning.fix_inconsistent_energy(df)
     assert res["energy_kcal_100g"].iloc[0] == 150.0
     assert res["energy_kcal_100g"].iloc[1] == 100.0
+
+
+def test_fix_inconsistent_energy_tordu_kcal_absentes_controlees_via_les_kj():
+    # kcal absentes : la règle contrôle les kcal qui seraient tirées des kJ (215 kJ = 51,4 kcal)
+    df = small(
+        energy_kcal_100g=[NA, NA], energy_kj_100g=[215.0, 0.0], fat_100g=[3.2, 1.0],
+        carbohydrates_100g=[40.0, 10.0], proteins_100g=[10.0, 2.0], food_groups_tag_1=["en:x", "en:x"],
+    )
+    res, report = cleaning.fix_inconsistent_energy(df)
+    assert list(res["energy_kcal_100g"]) == [228.8, 57.0]   # 4/4/9 : 160 + 40 + 28.8, puis 40 + 8 + 9
+    assert list(res["energy_kj_100g"]) == [957.3, 238.5]
+    assert report.rows_touched == 2
+
+
+# =====================================================================
+# 14. drop_rows_without_key_nutrient
+# =====================================================================
+def test_drop_rows_without_key_nutrient_nominal(raw):
+    res, report = cleaning.drop_rows_without_key_nutrient(raw)
+    assert "1011" not in set(res["code"])
+    assert report.details["rows_dropped"] == 1
+
+
+def test_drop_rows_without_key_nutrient_tordu_un_seul_suffit():
+    df = small(
+        energy_kcal_100g=[NA, NA], energy_kj_100g=[NA, NA], saturated_fat_100g=[NA, NA],
+        sugars_100g=[NA, NA], proteins_100g=[NA, NA], salt_100g=[NA, 0.0], sodium_100g=[NA, NA],
+    )
+    res, _ = cleaning.drop_rows_without_key_nutrient(df)
+    assert len(res) == 1  # un zéro est une valeur connue
 
 
 # =====================================================================
@@ -514,6 +526,20 @@ def test_clean_energie_invalidee_sans_autre_nutriment_est_supprimee_des_la_premi
     assert_frame_equal(res, again)
 
 
+def test_clean_idempotent_kcal_absentes_derivees_des_kj(raw):
+    # kcal absentes + kJ incohérents avec les macronutriments : le contrôle doit avoir lieu dès la première passe
+    trap = raw.iloc[[0, 0]].copy().reset_index(drop=True)
+    trap["code"] = ["9998", "9999"]
+    trap["energy_kcal_100g"] = NA
+    trap["energy_kj_100g"] = [215.0, 0.0]
+    trap["carbohydrates_100g"] = [40.0, 10.0]
+    trap["proteins_100g"] = [10.0, 2.0]
+    trap["fat_100g"] = [3.2, 1.0]
+    res, _ = cleaning.clean(pd.concat([raw, trap], ignore_index=True))
+    again, _ = cleaning.clean(res)
+    assert_frame_equal(res, again)
+
+
 def test_clean_idempotent(raw):
     once, _ = cleaning.clean(raw)
     twice, reports = cleaning.clean(once)
@@ -524,7 +550,7 @@ def test_clean_idempotent(raw):
 # =====================================================================
 # Échantillon réel (facultatif : ignoré si le fichier n'existe pas)
 # =====================================================================
-SAMPLE_PATH = Path(__file__).parent / "data" / "sample_raw.parquet"
+SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_raw.parquet"  # dossier data/ de la racine
 
 
 @pytest.mark.skipif(not SAMPLE_PATH.exists(), reason="échantillon réel absent")
@@ -534,3 +560,14 @@ def test_clean_idempotent_on_real_sample():
     twice, reports = cleaning.clean(once)
     assert_frame_equal(once, twice)
     assert all(report.rows_touched == 0 for report in reports)
+
+
+@pytest.mark.skipif(not SAMPLE_PATH.exists(), reason="échantillon réel absent")
+@pytest.mark.parametrize("rule", RULES, ids=RULE_IDS)
+def test_idempotence_per_rule_on_real_sample(rule):
+    # Chaque règle, seule, deux fois de suite : le même DataFrame et zéro ligne touchée la seconde fois
+    sample, _ = cleaning.type_columns(pd.read_parquet(SAMPLE_PATH))
+    once, _ = rule(sample)
+    twice, report = rule(once)
+    assert_frame_equal(once, twice)
+    assert report.rows_touched == 0

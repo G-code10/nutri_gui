@@ -1,23 +1,63 @@
 """Extrait de la table brute un petit échantillon parquet pour les tests d'idempotence.
 
+La table brute products_nutrition est reconstruite à partir de data/food.parquet avec la
+requête de la cartographie (3.2.2), dans une base temporaire supprimée à la fin.
 L'échantillon reste BRUT (aucun nettoyage) : le test applique clean() lui-même.
-Il est reproductible : même table + même graine = mêmes lignes, sur toutes les machines.
+Il est reproductible : même parquet + même graine = mêmes lignes, sur toutes les machines.
 
 Usage (depuis la racine du dépôt) :
-    python scripts/make_sample_raw.py --db chemin/vers/base.duckdb
+    python scripts/make_sample_raw.py
+    python scripts/make_sample_raw.py --parquet chemin/vers/food.parquet --rows 2000
 """
 
 import argparse
+import tempfile
 from pathlib import Path
 
 import duckdb
 
 ROOT = Path(__file__).resolve().parent.parent
+DEFAULT_PARQUET = ROOT / "data" / "food.parquet"
 DEFAULT_OUT = ROOT / "data" / "sample_raw.parquet"
 DEFAULT_TABLE = "products_nutrition"
 DEFAULT_ROWS = 5000
-DEFAULT_SEED = 42
 ANOMALY_ROWS = 100  # lignes ajoutées par type d'anomalie, pour que le test ait de quoi nettoyer
+
+# Requête de création de la cartographie (3.2.2), recopiée telle quelle sauf le chemin du parquet
+CREATE_TABLE_SQL = """
+    CREATE TABLE {table} AS
+    SELECT
+        t.code,
+        t.product_name[1].text AS product_name,
+        NULLIF(t.brands, '') AS brands,
+        t.categories_tags,
+        t.compared_to_category AS main_category,
+        t.food_groups_tags[1] AS food_groups_tag_1,
+        array_to_string(t.allergens_tags, ',') AS allergens,
+        t.ingredients_text[1].text AS ingredients_text,
+        t.nova_group,
+        t.nutriscore_score,
+        t.nutriscore_grade,
+        t.serving_size,
+        t.completeness,
+        t.last_modified_t,
+        list_filter(t.nutriments, x -> x.name = 'energy-kcal')[1]."100g" AS energy_kcal_100g,
+        COALESCE(
+            list_filter(t.nutriments, x -> x.name = 'energy-kj')[1]."100g",
+            list_filter(t.nutriments, x -> x.name = 'energy')[1]."100g"
+        ) AS energy_kj_100g,
+        list_filter(t.nutriments, x -> x.name = 'fat')[1]."100g" AS fat_100g,
+        list_filter(t.nutriments, x -> x.name = 'saturated-fat')[1]."100g" AS saturated_fat_100g,
+        list_filter(t.nutriments, x -> x.name = 'carbohydrates')[1]."100g" AS carbohydrates_100g,
+        list_filter(t.nutriments, x -> x.name = 'sugars')[1]."100g" AS sugars_100g,
+        list_filter(t.nutriments, x -> x.name = 'fiber')[1]."100g" AS fiber_100g,
+        list_filter(t.nutriments, x -> x.name = 'proteins')[1]."100g" AS proteins_100g,
+        list_filter(t.nutriments, x -> x.name = 'salt')[1]."100g" AS salt_100g,
+        list_filter(t.nutriments, x -> x.name = 'sodium')[1]."100g" AS sodium_100g,
+        list_filter(t.nutriments, x -> x.name = 'fruits-vegetables-legumes')[1]."100g"
+            AS fruits_vegetables_legumes_100g
+    FROM '{parquet}' AS t
+"""
 
 # Colonnes lues par clean() ; last_modified_t est facultative (départage des doublons)
 REQUIRED_COLUMNS = [
@@ -42,6 +82,11 @@ ANOMALY_FILTERS = {
     "code avec espaces": "code <> trim(code)",
     "nom en majuscules": "product_name = upper(product_name) AND product_name <> lower(product_name)",
 }
+
+
+def create_raw_table(con: duckdb.DuckDBPyConnection, parquet: Path, table: str) -> None:
+    """Construit la table brute à partir du parquet OpenFoodFacts."""
+    con.execute(CREATE_TABLE_SQL.format(table=table, parquet=parquet.as_posix()))
 
 
 def select_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[str]:
@@ -91,23 +136,30 @@ def build_query(table: str, columns: list[str], rows: int) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extrait un échantillon brut de la table produits.")
-    parser.add_argument("--db", required=True, help="fichier DuckDB contenant la table brute")
+    parser.add_argument("--parquet", type=Path, default=DEFAULT_PARQUET, help="parquet OpenFoodFacts")
     parser.add_argument("--table", default=DEFAULT_TABLE)
     parser.add_argument("--rows", type=int, default=DEFAULT_ROWS, help="codes tirés au hasard")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args()
 
-    con = duckdb.connect(args.db, read_only=True)
-    columns = select_columns(con, args.table)
-    query = build_query(args.table, columns, args.rows)
+    if not args.parquet.exists():
+        raise SystemExit(f"Parquet introuvable : {args.parquet}")
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
-    # ORDER BY final : fichier identique d'une exécution à l'autre
-    con.execute(
-        f"COPY (SELECT * FROM ({query}) ORDER BY hash(code), code, completeness) "
-        f"TO '{args.out.as_posix()}' (FORMAT parquet)"
-    )
-    count = con.execute(f"SELECT count(*) FROM read_parquet('{args.out.as_posix()}')").fetchone()[0]
+    # Base temporaire sur disque (et non en mémoire) : le dépliage de nutriments est gourmand
+    with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
+        con = duckdb.connect(str(Path(tmp) / "raw.duckdb"))
+        create_raw_table(con, args.parquet, args.table)
+        columns = select_columns(con, args.table)
+        query = build_query(args.table, columns, args.rows)
+        # ORDER BY ALL : tri sur toutes les colonnes, donc ordre total et fichier identique d'un lancement à l'autre
+        con.execute(
+            f"COPY (SELECT * FROM ({query}) ORDER BY ALL) "
+            f"TO '{args.out.as_posix()}' (FORMAT parquet)"
+        )
+        con.close()
+
+    count = duckdb.sql(f"SELECT count(*) FROM read_parquet('{args.out.as_posix()}')").fetchone()[0]
     print(f"{count} lignes écrites dans {args.out}")
 
 
