@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 
+pd.options.mode.copy_on_write = True
+
 # --- Constantes métier ---
 KJ_PER_KCAL = 4.184
 SALT_PER_SODIUM = 2.5
