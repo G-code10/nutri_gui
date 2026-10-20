@@ -1,0 +1,8 @@
+# Dépendances de développement : tout requirements.txt, plus les tests et les notebooks.
+# Installation : python -m pip install -r requirements-dev.txt
+
+-r requirements.txt
+
+pytest==9.1.1            # python -m pytest -q -rs
+ipykernel==7.3.0         # exécuter les notebooks (apporte ipython, jupyter_client, etc.)
+matplotlib==3.11.1       # graphiques des notebooks d'exploration
