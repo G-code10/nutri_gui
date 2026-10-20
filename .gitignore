@@ -3,6 +3,7 @@
 *.pyc
 .pytest_cache
 __pycache__
+db.env
 # Afin de pouvoir travailler avec les brouillons à jour, ces lignes sont commentées
 # /notesbooks/christian
 # /notesbooks/guillaume
