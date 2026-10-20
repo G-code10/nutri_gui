@@ -19,7 +19,6 @@ from src import cleaning
 pd.options.mode.copy_on_write = True
 
 ROOT = Path(__file__).resolve().parent.parent
-# TODO : passer au parquet complet quand l'étape de lecture du pipeline existera (échantillon via --source)
 DEFAULT_SOURCE = ROOT / "data" / "sample_raw.parquet"
 DEFAULT_OUTPUT = ROOT / "docs" / "data" / "rapport_nettoyage.md"
 CREDIT = "Données : Open Food Facts, © Open Food Facts contributors, licence ODbL."
@@ -206,7 +205,7 @@ def generate_report(
     return path
 
 
-def _display_path(path: Path) -> str:
+def display_path(path: Path) -> str:
     """Chemin relatif à la racine du dépôt quand c'est possible : le rapport ne contient pas de chemin de machine."""
     path = Path(path).resolve()
     return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else path.name
@@ -220,7 +219,7 @@ def main(argv: list[str] | None = None) -> None:
 
     before = pd.read_parquet(args.source)
     after, reports = cleaning.clean(before)
-    path = generate_report(before, after, reports, args.out, _display_path(args.source))
+    path = generate_report(before, after, reports, args.out, display_path(args.source))
     print(f"Rapport écrit : {path} ({len(before)} lignes avant, {len(after)} après)")
 
 
