@@ -1,13 +1,13 @@
 """Extrait de la table brute un petit échantillon parquet pour les tests d'idempotence.
 
 La table brute products_nutrition est reconstruite à partir de data/food.parquet avec la
-requête de la cartographie (3.2.2), dans une base temporaire supprimée à la fin.
+requête d'extraction partagée (src/extract.py), dans une base temporaire supprimée à la fin.
 L'échantillon reste BRUT (aucun nettoyage) : le test applique clean() lui-même.
 Il est reproductible : même parquet + même graine = mêmes lignes, sur toutes les machines.
 
-Usage (depuis la racine du dépôt) :
-    python scripts/make_sample_raw.py
-    python scripts/make_sample_raw.py --parquet chemin/vers/food.parquet --rows 2000
+Usage (depuis la racine du dépôt, avec -m pour que « src » soit importable) :
+    python -m scripts.make_sample_raw
+    python -m scripts.make_sample_raw --parquet chemin/vers/food.parquet --rows 2000
 """
 
 import argparse
@@ -16,6 +16,8 @@ from pathlib import Path
 
 import duckdb
 
+from src.extract import create_raw_table
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_PARQUET = ROOT / "data" / "food.parquet"
 DEFAULT_OUT = ROOT / "data" / "sample_raw.parquet"
@@ -23,43 +25,8 @@ DEFAULT_TABLE = "products_nutrition"
 DEFAULT_ROWS = 5000
 ANOMALY_ROWS = 100  # lignes ajoutées par type d'anomalie, pour que le test ait de quoi nettoyer
 
-# Requête de création de la cartographie (3.2.2), recopiée telle quelle sauf le chemin du parquet
-CREATE_TABLE_SQL = """
-    CREATE TABLE {table} AS
-    SELECT
-        t.code,
-        t.product_name[1].text AS product_name,
-        NULLIF(t.brands, '') AS brands,
-        t.categories_tags,
-        t.compared_to_category AS main_category,
-        t.food_groups_tags[1] AS food_groups_tag_1,
-        array_to_string(t.allergens_tags, ',') AS allergens,
-        t.ingredients_text[1].text AS ingredients_text,
-        t.nova_group,
-        t.nutriscore_score,
-        t.nutriscore_grade,
-        t.serving_size,
-        t.completeness,
-        t.last_modified_t,
-        list_filter(t.nutriments, x -> x.name = 'energy-kcal')[1]."100g" AS energy_kcal_100g,
-        COALESCE(
-            list_filter(t.nutriments, x -> x.name = 'energy-kj')[1]."100g",
-            list_filter(t.nutriments, x -> x.name = 'energy')[1]."100g"
-        ) AS energy_kj_100g,
-        list_filter(t.nutriments, x -> x.name = 'fat')[1]."100g" AS fat_100g,
-        list_filter(t.nutriments, x -> x.name = 'saturated-fat')[1]."100g" AS saturated_fat_100g,
-        list_filter(t.nutriments, x -> x.name = 'carbohydrates')[1]."100g" AS carbohydrates_100g,
-        list_filter(t.nutriments, x -> x.name = 'sugars')[1]."100g" AS sugars_100g,
-        list_filter(t.nutriments, x -> x.name = 'fiber')[1]."100g" AS fiber_100g,
-        list_filter(t.nutriments, x -> x.name = 'proteins')[1]."100g" AS proteins_100g,
-        list_filter(t.nutriments, x -> x.name = 'salt')[1]."100g" AS salt_100g,
-        list_filter(t.nutriments, x -> x.name = 'sodium')[1]."100g" AS sodium_100g,
-        list_filter(t.nutriments, x -> x.name = 'fruits-vegetables-legumes')[1]."100g"
-            AS fruits_vegetables_legumes_100g
-    FROM '{parquet}' AS t
-"""
-
-# Colonnes lues par clean() ; last_modified_t est facultative (départage des doublons)
+# Colonnes lues par clean(), puis colonnes du TP 12 (typage Parquet, export features) ;
+# last_modified_t est facultative (départage des doublons)
 REQUIRED_COLUMNS = [
     "code", "product_name", "brands", "ingredients_text", "allergens", "serving_size",
     "energy_kcal_100g", "energy_kj_100g", "fat_100g", "saturated_fat_100g",
@@ -67,6 +34,7 @@ REQUIRED_COLUMNS = [
     "salt_100g", "sodium_100g", "fruits_vegetables_legumes_100g", "completeness",
     "nutriscore_score", "nutriscore_grade", "nova_group",
     "food_groups_tag_1", "categories_tags",
+    "additives_n", "created_t",
 ]
 OPTIONAL_COLUMNS = ["last_modified_t"]
 
@@ -82,11 +50,6 @@ ANOMALY_FILTERS = {
     "code avec espaces": "code <> trim(code)",
     "nom en majuscules": "product_name = upper(product_name) AND product_name <> lower(product_name)",
 }
-
-
-def create_raw_table(con: duckdb.DuckDBPyConnection, parquet: Path, table: str) -> None:
-    """Construit la table brute à partir du parquet OpenFoodFacts."""
-    con.execute(CREATE_TABLE_SQL.format(table=table, parquet=parquet.as_posix()))
 
 
 def select_columns(con: duckdb.DuckDBPyConnection, table: str) -> list[str]:
