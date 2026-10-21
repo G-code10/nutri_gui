@@ -20,8 +20,6 @@ import pyarrow.parquet as pq
 from src import cleaning, config, create_db, load_db, report
 from src.utils import display_path
 
-pd.options.mode.copy_on_write = True
-
 DEFAULT_SOURCE = config.RAW_PATH
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
 DEFAULT_CLEAN = config.CLEAN_PATH

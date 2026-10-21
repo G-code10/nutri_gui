@@ -20,8 +20,6 @@ from src import config, schema
 from src.config import UNKNOWN_AISLE
 from src.utils import aisle_code
 
-pd.options.mode.copy_on_write = True
-
 ENV_PATH = config.ROOT / "db.env"
 
 CONF = {
