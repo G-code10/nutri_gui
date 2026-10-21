@@ -6,3 +6,5 @@
 pytest==9.1.1            # python -m pytest -q -rs
 ipykernel==7.3.0         # exécuter les notebooks (apporte ipython, jupyter_client, etc.)
 matplotlib==3.11.1       # graphiques des notebooks d'exploration
+ruff==0.17.1             # vérification imports et variables inutilisés, noms non définis + autres
+pylint==4.1.3            # détection de code dupliqué

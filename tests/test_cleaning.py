@@ -169,7 +169,7 @@ def test_normalize_texts_tordu_octets_nuls():
     assert pd.isna(res["product_name"].iloc[1])
     assert report.details["nul_removed"] == 2
     assert not any("\x00" in str(value) for column in res.columns for value in res[column])
-    again, second = cleaning.normalize_texts(res)
+    _again, second = cleaning.normalize_texts(res)
     assert second.rows_touched == 0   # seconde passe : rien à faire
 
 

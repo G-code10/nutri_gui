@@ -1,9 +1,9 @@
 # import pandas as pd
 # import numpy as np
 # import pyarrow as pa
-import pyarrow.parquet as pq
 import re
-import json
+
+import pyarrow.parquet as pq
 
 #TODO nutriments
 

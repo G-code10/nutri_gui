@@ -1,4 +1,4 @@
-nutriments_categorized = dict()
+nutriments_categorized = {}
 nutriments_categorized["nutriments"] = []
 nutriments_categorized["nutriments"].append({"Vitamines": [
 	"vitamin-a", 

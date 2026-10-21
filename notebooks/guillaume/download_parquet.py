@@ -1,10 +1,13 @@
-import os, sys
+import os
+import sys
+
 sys.path.append(".")
 
-import conf
-
-import pycurl
 from io import BytesIO
+
+import conf
+import pycurl
+
 
 def progress(download_t, download_d, upload_t, upload_d):
     download_done = 0
@@ -14,17 +17,17 @@ def progress(download_t, download_d, upload_t, upload_d):
 
 if not os.path.exists(conf.nutriscope_root_dir):
     print(f"Le répertoire de l'application n'est pas présent: {conf.nutriscope_root_dir}")
-    exit()
+    sys.exit()
 
 if not os.path.exists(conf.cache_dir):
     os.mkdir(conf.cache_dir)
 
 if "--clear" in sys.argv:
-    print(f"Netoyage du fichier parquet précédent.")
+    print("Netoyage du fichier parquet précédent.")
 
 if os.path.exists(conf.off_parquet_path):
-    print(f"Fichier parquet déjà présent... Relancer le script avec \"--clear\" pour le netoyer !")
-    exit()
+    print("Fichier parquet déjà présent... Relancer le script avec \"--clear\" pour le netoyer !")
+    sys.exit()
 
 buffer = BytesIO()
 

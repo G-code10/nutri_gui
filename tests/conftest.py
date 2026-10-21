@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src import create_db, load_db  # noqa: E402  (après l'ajout de la racine au chemin des imports)
+from src import create_db, load_db
 
 # Chargé dès l'import de ce fichier, donc avant la collecte des tests (qui lisent TEST_DATABASE_URL à l'import).
 # TEST_DATABASE_URL peut être définie dans db.env ; un export fait dans le terminal l'emporte.
