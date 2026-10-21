@@ -5,14 +5,13 @@ Deux niveaux : la base elle-même (create_database_if_missing), puis ses tables 
 Lancement seul : python -m src.create_db   (connexion : CONF de load_db.py complétée par db.env)
 """
 
-from pathlib import Path
 
 import psycopg
 from psycopg import sql
 
-from src import load_db
+from src import config, load_db
 
-SQL_PATH = Path(__file__).resolve().parent.parent / "sql" / "create_db.sql"
+SQL_PATH = config.ROOT / "sql" / "create_db.sql"
 ADMIN_DATABASE = "postgres"   # base qui existe toujours : on s'y connecte pour créer les autres
 
 

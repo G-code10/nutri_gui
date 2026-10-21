@@ -1,15 +1,14 @@
 """Tests du schéma de validation : un DataFrame nettoyé passe, chaque défaut est refusé."""
 
-from pathlib import Path
 
 import pandas as pd
 import pandera.pandas as pa
 import pytest
 
-from src import cleaning, schema
+from src import cleaning, config, schema
 
 NA = pd.NA
-SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_raw.parquet"
+SAMPLE_PATH = config.SAMPLE_RAW_PATH   # data/raw/sample_raw.parquet, produit par scripts/make_sample_raw.py
 
 
 @pytest.fixture

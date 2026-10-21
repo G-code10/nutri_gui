@@ -15,15 +15,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from src import cleaning
+from src import cleaning, config
+from src.utils import aisle_code, display_path
 
 pd.options.mode.copy_on_write = True
 
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SOURCE = ROOT / "data" / "raw" / "products_nutrition.parquet"   # table complète, produite par extract.py
-DEFAULT_OUTPUT = ROOT / "docs" / "data" / "rapport_nettoyage.md"
+DEFAULT_SOURCE = config.RAW_PATH   # table complète, produite par extract.py
+DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
 CREDIT = "Données : Open Food Facts, © Open Food Facts contributors, licence ODbL."
-UNKNOWN_AISLE = "unknown"
 
 # Colonnes dont on suit les manquants avant / après
 KEY_COLUMNS = cleaning.KEY_NUTRIENTS + [
@@ -63,7 +62,7 @@ def _numeric(df: pd.DataFrame) -> pd.DataFrame:
     return res
 
 
-def missing_count(series: pd.Series) -> int:
+def _missing_count(series: pd.Series) -> int:
     """Valeurs absentes : NA, ou texte vide."""
     blank = series.astype("string").str.strip().eq("").fillna(False)
     return int((series.isna() | blank).sum())
@@ -145,8 +144,8 @@ def _anomalies_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
 def _missing_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
     rows = []
     for column in KEY_COLUMNS:
-        n_before = missing_count(before[column])
-        n_after = missing_count(after[column]) if column in after.columns else None
+        n_before = _missing_count(before[column])
+        n_after = _missing_count(after[column]) if column in after.columns else None
         rows.append([
             column,
             _fmt(n_before), _percent(n_before, len(before)),
@@ -158,7 +157,7 @@ def _missing_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
 
 
 def _aisles_section(after: pd.DataFrame) -> str:
-    aisles = after["food_groups_tag_1"].astype("string").replace("", pd.NA).fillna(UNKNOWN_AISLE)
+    aisles = aisle_code(after["food_groups_tag_1"])
     counts = sorted(aisles.value_counts().items(), key=lambda item: (-item[1], item[0]))   # tri total : ex æquo par nom
     rows = [[f"`{aisle}`", _fmt(count), _percent(count, len(after))] for aisle, count in counts]
     return "## 5. Produits par rayon après nettoyage\n\n" + _table(["Rayon", "Produits", "Part"], rows)
@@ -204,12 +203,6 @@ def generate_report(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(build_report(before, after, reports, source, date), encoding="utf-8", newline="\n")
     return path
-
-
-def display_path(path: Path) -> str:
-    """Chemin relatif à la racine du dépôt quand c'est possible : le rapport ne contient pas de chemin de machine."""
-    path = Path(path).resolve()
-    return path.relative_to(ROOT).as_posix() if path.is_relative_to(ROOT) else path.name
 
 
 def main(argv: list[str] | None = None) -> None:

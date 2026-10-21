@@ -1,14 +1,13 @@
 """Tests de cleaning.py : un cas nominal et un cas tordu par règle, pureté et idempotence sur toutes."""
 
 from functools import partial
-from pathlib import Path
 
 import numpy as np
 import pandas as pd
 import pytest
 from pandas.testing import assert_frame_equal
 
-from src import cleaning
+from src import cleaning, config
 
 NA = np.nan
 
@@ -582,7 +581,7 @@ def test_clean_idempotent(raw):
 # =====================================================================
 # Échantillon réel (facultatif : ignoré si le fichier n'existe pas)
 # =====================================================================
-SAMPLE_PATH = Path(__file__).resolve().parent.parent / "data" / "sample_raw.parquet"  # dossier data/ de la racine
+SAMPLE_PATH = config.SAMPLE_RAW_PATH   # data/raw/sample_raw.parquet, produit par scripts/make_sample_raw.py
 
 
 @pytest.mark.skipif(not SAMPLE_PATH.exists(), reason="échantillon réel absent")

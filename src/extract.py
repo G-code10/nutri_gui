@@ -17,13 +17,13 @@ from pathlib import Path
 
 import duckdb
 
-ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SOURCE = ROOT / "data" / "food.parquet"
-DEFAULT_OUTPUT = ROOT / "data" / "raw" / "products_nutrition.parquet"
-DEFAULT_COUNTRY_OUTPUT = ROOT / "data" / "raw" / "extrait_france.parquet"
-FRANCE_TAG = "en:france"
+from src import config
+from src.utils import duckdb_parquet_options, sql_literal
 
-LICENSE = "Open Food Facts contributors - ODbL (https://opendatacommons.org/licenses/odbl/1-0/)"
+DEFAULT_SOURCE = config.FOOD_PARQUET
+DEFAULT_OUTPUT = config.RAW_PATH
+DEFAULT_COUNTRY_OUTPUT = config.FRANCE_EXTRACT_PATH
+FRANCE_TAG = "en:france"
 
 # Liste du SELECT : requête de la cartographie (3.2.2), complétée de additives_n et created_t (TP 12)
 SELECT_SQL = """
@@ -73,24 +73,19 @@ COLUMNS = [
 ]
 
 
-def _sql_literal(value: str) -> str:
-    """Chaîne SQL entre apostrophes, apostrophes internes doublées."""
-    return "'" + value.replace("'", "''") + "'"
-
-
-def build_query(source: Path, country: str | None = None) -> str:
+def _build_query(source: Path, country: str | None = None) -> str:
     """Requête d'extraction ; `country` (tag OFF, ex. « en:france ») ne garde que les produits vendus dans ce pays."""
-    query = SELECT_SQL.format(source=_sql_literal(source.as_posix()))
+    query = SELECT_SQL.format(source=sql_literal(source.as_posix()))
     if country:
-        query += f"    WHERE list_contains(t.countries_tags, {_sql_literal(country)})\n"
+        query += f"    WHERE list_contains(t.countries_tags, {sql_literal(country)})\n"
     return query
 
 
 def create_raw_table(
-    con: duckdb.DuckDBPyConnection, source: Path, table: str = "products_nutrition", country: str | None = None
+    con: duckdb.DuckDBPyConnection, source: Path, table: str = config.RAW_TABLE, country: str | None = None
 ) -> None:
     """Crée la table brute `table` dans la connexion (utilisé par make_sample_raw.py)."""
-    con.execute(f"CREATE TABLE {table} AS {build_query(source, country)}")
+    con.execute(f"CREATE TABLE {table} AS {_build_query(source, country)}")
 
 
 def extract(source: Path, output: Path, country: str | None = None) -> int:
@@ -106,10 +101,10 @@ def extract(source: Path, output: Path, country: str | None = None) -> int:
 
     with duckdb.connect() as con:
         con.execute(
-            f"COPY ({build_query(source, country)}) TO {_sql_literal(output.as_posix())} "
-            f"(FORMAT PARQUET, COMPRESSION ZSTD, KV_METADATA {{license: {_sql_literal(LICENSE)}}})"
+            f"COPY ({_build_query(source, country)}) TO {sql_literal(output.as_posix())} "
+            f"(FORMAT PARQUET, {duckdb_parquet_options()})"
         )
-        return con.execute(f"SELECT count(*) FROM read_parquet({_sql_literal(output.as_posix())})").fetchone()[0]
+        return con.execute(f"SELECT count(*) FROM read_parquet({sql_literal(output.as_posix())})").fetchone()[0]
 
 
 def main(argv: list[str] | None = None) -> None:

@@ -11,17 +11,18 @@ Modèle : db.env.example. Une variable d'environnement déjà définie l'emporte
 """
 
 import os
-from pathlib import Path
 
 import pandas as pd
 import psycopg
 from dotenv import load_dotenv
 
-from src import schema
+from src import config, schema
+from src.config import UNKNOWN_AISLE
+from src.utils import aisle_code
 
 pd.options.mode.copy_on_write = True
 
-ENV_PATH = Path(__file__).resolve().parent.parent / "db.env"
+ENV_PATH = config.ROOT / "db.env"
 
 CONF = {
     "database": "nutriscope",
@@ -40,7 +41,6 @@ ENV_VARIABLES = {
     "POSTGRES_PASSWORD": "password",
 }
 
-UNKNOWN_AISLE = "unknown"
 TABLES = ["aisles", "brands", "categories", "products", "nutrients", "product_categories"]
 
 PRODUCT_COLUMNS = [
@@ -142,7 +142,7 @@ def load(df: pd.DataFrame, conn: psycopg.Connection) -> dict[str, int]:
     """Charge le DataFrame nettoyé dans les tables existantes. Renvoie le nombre de lignes par table."""
     check_input(df)
 
-    aisle = df["food_groups_tag_1"].astype("string").replace("", pd.NA).fillna(UNKNOWN_AISLE)
+    aisle = aisle_code(df["food_groups_tag_1"])
     tags = df["categories_tags"].explode().dropna()
 
     with conn.transaction():
