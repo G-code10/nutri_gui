@@ -59,7 +59,7 @@ SELECT_SQL = """
         list_filter(t.nutriments, x -> x.name = 'sodium')[1]."100g" AS sodium_100g,
         list_filter(t.nutriments, x -> x.name = 'fruits-vegetables-legumes')[1]."100g"
             AS fruits_vegetables_legumes_100g
-    FROM read_parquet('{source}') AS t
+    FROM read_parquet({source}) AS t
 """
 
 # Colonnes produites, dans l'ordre du SELECT (référence pour les tests et les scripts en aval)
@@ -80,7 +80,7 @@ def _sql_literal(value: str) -> str:
 
 def build_query(source: Path, country: str | None = None) -> str:
     """Requête d'extraction ; `country` (tag OFF, ex. « en:france ») ne garde que les produits vendus dans ce pays."""
-    query = SELECT_SQL.format(source=source.as_posix())
+    query = SELECT_SQL.format(source=_sql_literal(source.as_posix()))
     if country:
         query += f"    WHERE list_contains(t.countries_tags, {_sql_literal(country)})\n"
     return query

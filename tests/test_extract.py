@@ -136,6 +136,15 @@ def test_missing_source_raises(tmp_path):
     assert not out.exists()
 
 
+def test_paths_with_quote_are_escaped(off_parquet, tmp_path):
+    """Une apostrophe dans le chemin source ou de sortie ne casse pas la requête."""
+    folder = tmp_path / "dossier d'O'Neil"
+    folder.mkdir()
+    source = folder / "food.parquet"
+    off_parquet.rename(source)
+    assert extract.extract(source, folder / "raw.parquet") == 3
+
+
 def test_country_with_quote_is_escaped(off_parquet, tmp_path):
     """Une apostrophe dans le tag pays ne casse pas la requête (aucune ligne, pas d'erreur)."""
     assert extract.extract(off_parquet, tmp_path / "x.parquet", "en:côte-d'ivoire") == 0
