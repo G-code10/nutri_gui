@@ -5,7 +5,6 @@ Deux niveaux : la base elle-même (create_database_if_missing), puis ses tables 
 Lancement seul : python -m src.create_db   (connexion : CONF de load_db.py complétée par db.env)
 """
 
-
 import psycopg
 from psycopg import sql
 
