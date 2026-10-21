@@ -1,6 +1,7 @@
 """Pipeline de bout en bout : lecture -> règles de nettoyage -> rapport -> base PostgreSQL.
 
-Lancement : python -m src.pipeline [--source data/sample_raw.parquet] [--report docs/data/rapport_nettoyage.md] [--no-db]
+Lancement : python -m src.pipeline [--source data/raw/products_nutrition.parquet] [--report docs/data/rapport_nettoyage.md] [--no-db]
+Par défaut, la source est la table complète (extract.py) ; pour un essai rapide : --source data/sample_raw.parquet
 
 Rejouable : sur un nouvel export, il repart de zéro (le rapport est réécrit, le schéma de la base est recréé
 avant le chargement). Chaque étape annonce ses volumes ; le chargement affiche les lignes par table.
@@ -60,7 +61,7 @@ def run(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Lecture, nettoyage, rapport et chargement de la base.")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="parquet brut (colonnes de products_nutrition)")
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="parquet brut (colonnes de products_nutrition) ; défaut : table complète")
     parser.add_argument("--report", type=Path, default=DEFAULT_OUTPUT, help="fichier Markdown du rapport")
     parser.add_argument("--no-db", action="store_true", help="s'arrêter après le rapport, sans toucher à la base")
     args = parser.parse_args(argv)

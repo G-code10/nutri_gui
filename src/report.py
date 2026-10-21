@@ -1,6 +1,7 @@
 """Rapport avant / après du nettoyage : généré par ce script, jamais édité à la main.
 
-Lancement : python -m src.report [--source data/sample_raw.parquet] [--out docs/data/rapport_nettoyage.md]
+Lancement : python -m src.report [--source data/raw/products_nutrition.parquet] [--out docs/data/rapport_nettoyage.md]
+Essai rapide sur l'échantillon : python -m src.report --source data/sample_raw.parquet --out /tmp/rapport.md
 
 Le rapport ne dépend pas de la base : il compare le DataFrame brut et celui que renvoie cleaning.clean().
 Les anomalies sont recomptées avec leurs propres définitions (celles du diagnostic) et non avec le code
@@ -19,7 +20,7 @@ from src import cleaning
 pd.options.mode.copy_on_write = True
 
 ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_SOURCE = ROOT / "data" / "sample_raw.parquet"
+DEFAULT_SOURCE = ROOT / "data" / "raw" / "products_nutrition.parquet"   # table complète, produite par extract.py
 DEFAULT_OUTPUT = ROOT / "docs" / "data" / "rapport_nettoyage.md"
 CREDIT = "Données : Open Food Facts, © Open Food Facts contributors, licence ODbL."
 UNKNOWN_AISLE = "unknown"
@@ -213,7 +214,7 @@ def display_path(path: Path) -> str:
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Génère docs/data/rapport_nettoyage.md à partir d'un parquet brut.")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="parquet brut (colonnes de products_nutrition)")
+    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="parquet brut (colonnes de products_nutrition) ; défaut : table complète")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="fichier Markdown à écrire")
     args = parser.parse_args(argv)
 
