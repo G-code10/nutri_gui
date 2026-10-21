@@ -156,6 +156,24 @@ def test_normalize_texts_tordu():
     assert pd.isna(res["product_name"].iloc[2])           # espaces seuls -> NA
 
 
+def test_normalize_texts_tordu_octets_nuls():
+    # PostgreSQL refuse 0x00 dans un texte : retiré ; un texte réduit à cet octet devient vide, donc NA
+    df = small(
+        code=["1", "2"],
+        product_name=["Pain", "\x00"],
+        brands=["Mar\x00que", "Autre"],
+        ingredients_text=["x", "x"],
+        serving_size=["x", "x"],
+    )
+    res, report = cleaning.normalize_texts(df)
+    assert res["brands"].iloc[0] == "Marque"
+    assert pd.isna(res["product_name"].iloc[1])
+    assert report.details["nul_removed"] == 2
+    assert not any("\x00" in str(value) for column in res.columns for value in res[column])
+    again, second = cleaning.normalize_texts(res)
+    assert second.rows_touched == 0   # seconde passe : rien à faire
+
+
 # =====================================================================
 # 3. enforce_unique_code
 # =====================================================================
@@ -425,6 +443,20 @@ def test_fix_inconsistent_energy_tordu_kcal_absentes_controlees_via_les_kj():
     assert list(res["energy_kcal_100g"]) == [228.8, 57.0]   # 4/4/9 : 160 + 40 + 28.8, puis 40 + 8 + 9
     assert list(res["energy_kj_100g"]) == [957.3, 238.5]
     assert report.rows_touched == 2
+
+
+def test_fix_inconsistent_energy_tordu_macros_minuscules_rien_ne_change():
+    # énergie à 0 et macronutriments minuscules : le 4/4/9 arrondi donne 0,0 kcal, donc aucune valeur ne change
+    # (si la ligne était comptée, la seconde passe la compterait encore : idempotence)
+    df = small(
+        energy_kcal_100g=[0.0], energy_kj_100g=[0.0], fat_100g=[0.001],
+        carbohydrates_100g=[0.001], proteins_100g=[0.001], food_groups_tag_1=["en:x"],
+    )
+    first, report_first = cleaning.fix_inconsistent_energy(df)
+    _, report_second = cleaning.fix_inconsistent_energy(first)
+    assert list(first["energy_kcal_100g"]) == [0.0]
+    assert report_first.rows_touched == 0
+    assert report_second.rows_touched == 0
 
 
 # =====================================================================

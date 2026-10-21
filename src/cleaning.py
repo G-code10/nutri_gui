@@ -43,6 +43,10 @@ NUTRIENT_COLUMNS = [
 ]
 STRING_COLUMNS = ["code", "product_name", "brands", "ingredients_text", "allergens", "serving_size"]
 
+# Tous les textes envoyés à la base (on y cherche les octets nuls, que PostgreSQL refuse)
+ALL_TEXT_COLUMNS = STRING_COLUMNS + ["main_category", "food_groups_tag_1", "nutriscore_grade"]
+NUL = "\x00"
+
 # Textes dont une chaîne vide veut dire « manquant » (pas allergens : '' y a un sens)
 TEXT_COLUMNS = ["product_name", "brands", "ingredients_text", "serving_size"]
 
@@ -161,6 +165,12 @@ def _effective_kcal(df: pd.DataFrame) -> pd.Series:
     return df["energy_kcal_100g"].fillna((df["energy_kj_100g"] / KJ_PER_KCAL).round(1))
 
 
+def _changed(before: pd.Series, after: pd.Series) -> pd.Series:
+    """Lignes où la valeur a vraiment changé (NA -> valeur ou valeur -> NA comptent, NA -> NA non)."""
+    differs = (before.isna() != after.isna()) | (before.notna() & after.notna() & (before != after))
+    return differs.fillna(False).astype(bool)
+
+
 def _capitalize_first_letter(text: str) -> str:
     """Minuscules, puis majuscule sur la première lettre (pas le premier caractère : « 1664 Blanc »)."""
     return re.sub(r"[^\W\d_]", lambda match: match.group().upper(), text.lower(), count=1)
@@ -191,6 +201,23 @@ def type_columns(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
         res[column] = converted
 
     return res, _report("type_columns", df, res, coerced, columns_cast=columns_cast, values_coerced=coerced.sum())
+
+
+def _strip_nul_characters(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, int]:
+    """Sous-règle : octets nuls (0x00) retirés des textes ; PostgreSQL les refuse dans un champ texte."""
+    res = df.copy()
+    touched = pd.Series(False, index=res.index)
+    removed = 0
+    for column in ALL_TEXT_COLUMNS:
+        if column not in res.columns:
+            continue
+        text = res[column].astype("string")
+        has_nul = text.str.contains(NUL, regex=False).fillna(False).astype(bool)
+        if has_nul.any():   # une colonne sans octet nul n'est pas touchée (son type reste inchangé)
+            res[column] = text.mask(has_nul, text.str.replace(NUL, "", regex=False))
+            touched |= has_nul
+            removed += int(has_nul.sum())
+    return res, touched, removed
 
 
 def _blank_texts_to_na(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, int]:
@@ -248,14 +275,17 @@ def _strip_codes(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series, int]:
 
 
 def normalize_texts(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]:
-    """2. Normalisation des textes : vides -> NA, noms en majuscules corrigés, marques unifiées, codes sans espaces.
+    """2. Normalisation des textes : octets nuls retirés, vides -> NA, noms en majuscules corrigés, marques unifiées,
+    codes sans espaces.
 
-    Quatre sous-règles enchaînées ; le détail du compte rendu donne le nombre de valeurs corrigées par sous-règle.
+    Cinq sous-règles enchaînées ; le détail du compte rendu donne le nombre de valeurs corrigées par sous-règle.
+    Les octets nuls passent en premier : un texte réduit à un octet nul devient vide, puis NA.
     """
     res = df
     touched = pd.Series(False, index=df.index)
     details: dict[str, int] = {}
     for name, step in (
+        ("nul_removed", _strip_nul_characters),
         ("blank_to_na", _blank_texts_to_na),
         ("names_fixed", _fix_uppercase_names),
         ("brands_unified", _unify_brand_spelling),
@@ -512,6 +542,8 @@ def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]
     approximation (Atwater ignore fibres et polyols), ce que le TP demande ; si le calcul est impossible
     (macronutriment manquant, calcul hors de [0, 900]), les kcal et les kJ deviennent NA ; les kcal pourront être redérivées
     plus tard par derive_missing_energy, à partir des macronutriments seulement.
+    Une ligne n'est comptée que si une valeur change vraiment : avec une énergie à 0 et des macronutriments
+    minuscules, le 4/4/9 arrondi redonne 0,0, rien ne change et la seconde passe ne touche rien.
     """
     res = df.copy()
     carbs, proteins, fat = res["carbohydrates_100g"], res["proteins_100g"], res["fat_100g"]
@@ -536,11 +568,14 @@ def fix_inconsistent_energy(df: pd.DataFrame) -> tuple[pd.DataFrame, RuleReport]
     _recompute_energy(res, deviation_fix)
     _invalidate_energy(res, deviation_invalid)
 
-    touched = zero_fix | zero_invalid | deviation_fix | deviation_invalid
+    # Compté seulement si une valeur change : énergie à 0 et macros minuscules, le 4/4/9 redonne 0,0 (idempotence)
+    changed = _changed(df["energy_kcal_100g"], res["energy_kcal_100g"]) | _changed(
+        df["energy_kj_100g"], res["energy_kj_100g"]
+    )
     return res, _report(
-        "fix_inconsistent_energy", df, res, touched,
-        zero_recomputed=zero_fix.sum(), zero_invalidated=zero_invalid.sum(),
-        deviation_recomputed=deviation_fix.sum(), deviation_invalidated=deviation_invalid.sum(),
+        "fix_inconsistent_energy", df, res, changed,
+        zero_recomputed=(zero_fix & changed).sum(), zero_invalidated=(zero_invalid & changed).sum(),
+        deviation_recomputed=(deviation_fix & changed).sum(), deviation_invalidated=(deviation_invalid & changed).sum(),
     )
 
 

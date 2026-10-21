@@ -16,9 +16,6 @@ import pandas as pd
 from src import cleaning, create_db, load_db, report
 from src.report import DEFAULT_OUTPUT, DEFAULT_SOURCE
 
-pd.options.mode.copy_on_write = True
-
-
 def run(
     source: Path = DEFAULT_SOURCE,
     report_path: Path = DEFAULT_OUTPUT,
