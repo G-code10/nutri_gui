@@ -18,8 +18,6 @@ import pandas as pd
 from src import cleaning, config
 from src.utils import aisle_code, display_path, format_int, markdown_table
 
-pd.options.mode.copy_on_write = True
-
 DEFAULT_SOURCE = config.RAW_PATH   # table complète, produite par extract.py
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
 CREDIT = "Données : Open Food Facts, © Open Food Facts contributors, licence ODbL."
