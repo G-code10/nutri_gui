@@ -54,3 +54,21 @@ def test_duckdb_parquet_options_write_compression_and_license(tmp_path):
     ).fetchone()[0]
     assert compression.upper() == "ZSTD"
     assert license_ == config.LICENSE
+
+
+# --- aisle_slug_sql ---
+def test_aisle_slug_sql_gives_the_partition_slug():
+    rows = duckdb.sql(
+        f"SELECT {utils.aisle_slug_sql('t')} FROM (VALUES ('en:Fruits and Vegetables'), (NULL), ('  ')) AS v(t)"
+    ).fetchall()
+    assert [row[0] for row in rows] == ["en-fruits-and-vegetables", "unknown", "unknown"]
+
+
+# --- format_int, markdown_table ---
+def test_format_int_groups_thousands_with_a_space():
+    assert utils.format_int(1586106) == "1 586 106"
+    assert utils.format_int(12.0) == "12"
+
+
+def test_markdown_table_has_header_separator_and_rows():
+    assert utils.markdown_table(["a", "b"], [[1, 2]]) == "| a | b |\n| --- | --- |\n| 1 | 2 |"

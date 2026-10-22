@@ -24,8 +24,8 @@ from pathlib import Path
 import duckdb
 
 from src import cleaning, config
-from src.config import COMPRESSION, LICENSE, UNKNOWN_AISLE
-from src.utils import display_path, duckdb_parquet_options, sql_literal
+from src.config import COMPRESSION, LICENSE
+from src.utils import aisle_slug_sql, display_path, duckdb_parquet_options, sql_literal
 
 DEFAULT_SOURCE = config.CLEAN_PATH
 DEFAULT_OUTPUT = config.PRODUCTS_PARQUET_DIR
@@ -35,10 +35,7 @@ SUCCESS_MARKER = "_SUCCESS"
 PARTITION_KEY = "aisle"
 
 # Rayon = slug de food_groups_tag_1 (équivalent de pnns_groups_1) ; NULL ou vide -> unknown
-AISLE_SQL = (
-    "lower(regexp_replace(coalesce(nullif(trim(food_groups_tag_1), ''), "
-    f"'{UNKNOWN_AISLE}'), '[^A-Za-z0-9]+', '-', 'g'))"
-)
+AISLE_SQL = aisle_slug_sql("food_groups_tag_1")
 
 _NUTRIENT_REASON = "float64 comme cleaning.py et la base (DOUBLE PRECISION) : aucun arrondi, bornes comparées à l'identique"
 _TEXT_REASON = "texte libre"

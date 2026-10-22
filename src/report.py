@@ -16,7 +16,9 @@ from pathlib import Path
 import pandas as pd
 
 from src import cleaning, config
-from src.utils import aisle_code, display_path
+from src.utils import aisle_code, display_path, format_int, markdown_table
+
+pd.options.mode.copy_on_write = True
 
 DEFAULT_SOURCE = config.RAW_PATH   # table complète, produite par extract.py
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
@@ -29,11 +31,6 @@ KEY_COLUMNS = cleaning.KEY_NUTRIENTS + [
 
 
 # --- Petites fonctions de mise en forme ---
-def _fmt(number) -> str:
-    """Entier avec une espace entre les milliers : 12345 devient « 12 345 »."""
-    return f"{int(number):,}".replace(",", " ")
-
-
 def _fr(number: float) -> str:
     """Nombre avec une virgule décimale : 0.5 devient « 0,5 »."""
     return f"{number:g}".replace(".", ",")
@@ -42,13 +39,6 @@ def _fr(number: float) -> str:
 def _percent(part: int, total: int) -> str:
     """Pourcentage avec une décimale (0 % si le total est nul)."""
     return f"{100 * part / total:.1f} %".replace(".", ",") if total else "0 %"
-
-
-def _table(headers: list[str], rows: list[list]) -> str:
-    """Tableau Markdown."""
-    lines = ["| " + " | ".join(headers) + " |", "|" + "|".join(" --- " for _ in headers) + "|"]
-    lines += ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
-    return "\n".join(lines)
 
 
 # --- Mesures sur un DataFrame (brut ou nettoyé) ---
@@ -110,18 +100,18 @@ def business_anomalies(df: pd.DataFrame) -> dict[str, int]:
 # --- Sections du rapport ---
 def _volumes_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
     rows = [
-        ["Lignes", _fmt(len(before)), _fmt(len(after))],
-        ["Colonnes", _fmt(before.shape[1]), _fmt(after.shape[1])],
-        ["Codes distincts", _fmt(before["code"].nunique()), _fmt(after["code"].nunique())],
+        ["Lignes", format_int(len(before)), format_int(len(after))],
+        ["Colonnes", format_int(before.shape[1]), format_int(after.shape[1])],
+        ["Codes distincts", format_int(before["code"].nunique()), format_int(after["code"].nunique())],
     ]
-    return "## 1. Volumétrie\n\n" + _table(["", "Avant", "Après"], rows)
+    return "## 1. Volumétrie\n\n" + markdown_table(["", "Avant", "Après"], rows)
 
 
 def _rules_section(reports: list[cleaning.RuleReport]) -> str:
     rows = [
         [
-            f"`{r.rule}`", _fmt(r.rows_before), _fmt(r.rows_after), _fmt(r.rows_touched),
-            ", ".join(f"{key} = {_fmt(value)}" for key, value in r.details.items()),
+            f"`{r.rule}`", format_int(r.rows_before), format_int(r.rows_after), format_int(r.rows_touched),
+            ", ".join(f"{key} = {format_int(value)}" for key, value in r.details.items()),
         ]
         for r in reports
     ]
@@ -129,14 +119,14 @@ def _rules_section(reports: list[cleaning.RuleReport]) -> str:
         "Une ligne touchée par plusieurs sous-règles compte une fois dans « lignes touchées » "
         "et une fois par sous-règle dans le détail."
     )
-    table = _table(["Règle", "Lignes avant", "Lignes après", "Lignes touchées", "Détail"], rows)
+    table = markdown_table(["Règle", "Lignes avant", "Lignes après", "Lignes touchées", "Détail"], rows)
     return f"## 2. Lignes touchées par règle\n\n{note}\n\n{table}"
 
 
 def _anomalies_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
     anomalies_before, anomalies_after = business_anomalies(before), business_anomalies(after)
-    rows = [[label, _fmt(anomalies_before[label]), _fmt(anomalies_after[label])] for label in anomalies_before]
-    return "## 3. Anomalies métier avant / après\n\n" + _table(["Anomalie", "Avant", "Après"], rows)
+    rows = [[label, format_int(anomalies_before[label]), format_int(anomalies_after[label])] for label in anomalies_before]
+    return "## 3. Anomalies métier avant / après\n\n" + markdown_table(["Anomalie", "Avant", "Après"], rows)
 
 
 def _missing_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
@@ -146,19 +136,19 @@ def _missing_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
         n_after = _missing_count(after[column]) if column in after.columns else None
         rows.append([
             column,
-            _fmt(n_before), _percent(n_before, len(before)),
-            "—" if n_after is None else _fmt(n_after),
+            format_int(n_before), _percent(n_before, len(before)),
+            "—" if n_after is None else format_int(n_after),
             "—" if n_after is None else _percent(n_after, len(after)),
         ])
-    table = _table(["Colonne", "Manquants avant", "%", "Manquants après", "%"], rows)
+    table = markdown_table(["Colonne", "Manquants avant", "%", "Manquants après", "%"], rows)
     return "## 4. Manquants sur les colonnes clés\n\n" + table
 
 
 def _aisles_section(after: pd.DataFrame) -> str:
     aisles = aisle_code(after["food_groups_tag_1"])
     counts = sorted(aisles.value_counts().items(), key=lambda item: (-item[1], item[0]))   # tri total : ex æquo par nom
-    rows = [[f"`{aisle}`", _fmt(count), _percent(count, len(after))] for aisle, count in counts]
-    return "## 5. Produits par rayon après nettoyage\n\n" + _table(["Rayon", "Produits", "Part"], rows)
+    rows = [[f"`{aisle}`", format_int(count), _percent(count, len(after))] for aisle, count in counts]
+    return "## 5. Produits par rayon après nettoyage\n\n" + markdown_table(["Rayon", "Produits", "Part"], rows)
 
 
 def _columns_section(before: pd.DataFrame, after: pd.DataFrame) -> str:
