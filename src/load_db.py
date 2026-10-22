@@ -80,12 +80,20 @@ def settings() -> dict:
     return conf
 
 
-def connect(conf: dict | None = None) -> psycopg.Connection:
-    """Ouvre la connexion (settings() par défaut). autocommit : la transaction est gérée par load()."""
+def connection_params(conf: dict | None = None) -> dict:
+    """Paramètres de psycopg.connect tirés de la configuration (settings() par défaut).
+
+    Sert à connect() et au benchmark, qui les transmet à ses sous-processus de mesure.
+    """
     params = dict(settings() if conf is None else conf)
     params.pop("debug", None)                       # réglage de l'application, inconnu de psycopg
     params["dbname"] = params.pop("database")       # psycopg nomme cette clé « dbname »
-    return psycopg.connect(**params, autocommit=True)
+    return params
+
+
+def connect(conf: dict | None = None) -> psycopg.Connection:
+    """Ouvre la connexion (settings() par défaut). autocommit : la transaction est gérée par load()."""
+    return psycopg.connect(**connection_params(conf), autocommit=True)
 
 
 def aisle_label(tag: str) -> str:

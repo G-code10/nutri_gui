@@ -18,6 +18,7 @@ Données : © Open Food Facts contributors — ODbL (rappel écrit dans les Parq
 import argparse
 import json
 import shutil
+import time
 from datetime import date
 from pathlib import Path
 
@@ -25,7 +26,13 @@ import duckdb
 
 from src import cleaning, config
 from src.config import COMPRESSION, LICENSE
-from src.utils import aisle_slug_sql, display_path, duckdb_parquet_options, sql_literal
+from src.utils import (
+    aisle_slug_sql,
+    append_duration,
+    display_path,
+    duckdb_parquet_options,
+    sql_literal,
+)
 
 DEFAULT_SOURCE = config.CLEAN_PATH
 DEFAULT_OUTPUT = config.PRODUCTS_PARQUET_DIR
@@ -135,12 +142,14 @@ def _write_schema(output: Path, source: Path, typed: list, row_count: int, aisle
     return path
 
 
-def convert(source: Path, output: Path) -> int:
+def convert(source: Path, output: Path, durations_path: Path | None = None) -> int:
     """Convertit le nettoyé en Parquet partitionné par aisle ; renvoie le nombre de lignes écrites.
 
     Ordre d'écriture : dossier supprimé, partitions, schéma, puis _SUCCESS en dernier (un dossier sans
-    marqueur est incomplet). Lève FileNotFoundError si la source n'existe pas.
+    marqueur est incomplet). La durée est ensuite ajoutée au journal des durées (config.DURATIONS_LOG_PATH
+    par défaut). Lève FileNotFoundError si la source n'existe pas.
     """
+    started = time.perf_counter()
     if not source.exists():
         raise FileNotFoundError(f"Nettoyé introuvable : {source} (lancer d'abord le pipeline de nettoyage)")
 
@@ -164,6 +173,7 @@ def convert(source: Path, output: Path) -> int:
 
     _write_schema(output, source, typed, row_count, aisles)
     (output / SUCCESS_MARKER).write_text("", encoding="utf-8")
+    append_duration(config.STEP_CONVERT, time.perf_counter() - started, row_count, display_path(source), durations_path)
     return row_count
 
 

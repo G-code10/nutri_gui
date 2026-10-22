@@ -11,6 +11,7 @@ partent ainsi du même nettoyé.
 """
 
 import argparse
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -18,7 +19,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 
 from src import cleaning, config, create_db, load_db, report
-from src.utils import display_path
+from src.utils import append_duration, display_path
 
 DEFAULT_SOURCE = config.RAW_PATH
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
@@ -46,18 +47,36 @@ def run(
     conf: dict | None = None,
     load_to_db: bool = True,
     clean_path: Path = DEFAULT_CLEAN,
+    durations_path: Path | None = None,
 ) -> dict:
-    """Enchaîne les étapes et renvoie les volumes : lignes lues, lignes nettoyées, nettoyé écrit, lignes par table, contrôles."""
-    before = pd.read_parquet(source)
-    print(f"[1/6] Lecture : {display_path(source)} ({len(before)} lignes)")
+    """Enchaîne les étapes et renvoie les volumes : lignes lues, lignes nettoyées, nettoyé écrit, lignes par table, contrôles.
 
+    Chaque étape réussie ajoute sa durée au journal des durées (config.DURATIONS_LOG_PATH par défaut) :
+    le benchmark y lit le coût de construction de chaque support.
+    """
+    source_label = display_path(source)
+
+    def log(step: str, started: float, rows: int | None) -> None:
+        append_duration(step, time.perf_counter() - started, rows, source_label, durations_path)
+
+    started = time.perf_counter()
+    before = pd.read_parquet(source)
+    log(config.STEP_READ, started, len(before))
+    print(f"[1/6] Lecture : {source_label} ({len(before)} lignes)")
+
+    started = time.perf_counter()
     after, rule_reports = cleaning.clean(before)
+    log(config.STEP_CLEAN, started, len(after))
     print(f"[2/6] Nettoyage : {len(before)} -> {len(after)} lignes ({len(rule_reports)} comptes rendus)")
 
+    started = time.perf_counter()
     clean_written = _write_clean(after, clean_path)
+    log(config.STEP_WRITE_CLEAN, started, len(after))
     print(f"[3/6] Nettoyé : {display_path(clean_written)}")
 
-    written = report.generate_report(before, after, rule_reports, report_path, display_path(source))
+    started = time.perf_counter()
+    written = report.generate_report(before, after, rule_reports, report_path, source_label)
+    log(config.STEP_REPORT, started, len(after))
     print(f"[4/6] Rapport : {display_path(written)}")
 
     summary = {
@@ -69,12 +88,16 @@ def run(
         return summary
 
     name = (conf or load_db.settings())["database"]
+    started = time.perf_counter()
     created = create_db.create_database_if_missing(conf)
     with load_db.connect(conf) as conn:
         create_db.create_schema(conn)
+        log(config.STEP_DB_SCHEMA, started, None)
         print(f"[5/6] Base « {name} » : {'créée' if created else 'déjà existante'}, schéma recréé")
 
+        started = time.perf_counter()
         summary["tables"] = load_db.load(after, conn)
+        log(config.STEP_DB_LOAD, started, summary["tables"]["products"])
         print("[6/6] Chargement, lignes par table :")
         for table, count in summary["tables"].items():
             print(f"      {table} : {count}")

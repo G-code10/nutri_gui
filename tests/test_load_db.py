@@ -97,6 +97,11 @@ def test_settings_ignores_commented_lines(isolated_env):
     assert load_db.settings()["host"] == "localhost"
 
 
+def test_connection_params_translate_conf_for_psycopg():
+    params = load_db.connection_params({"database": "base", "user": "moi", "debug": True})
+    assert params == {"dbname": "base", "user": "moi"}
+
+
 def test_connect_translates_conf_for_psycopg(isolated_env, monkeypatch):
     received = {}
     monkeypatch.setattr(psycopg, "connect", lambda **kwargs: received.update(kwargs))

@@ -28,6 +28,7 @@ CLEAN_PATH = DATA_DIR / "clean" / "products_clean.parquet"        # nettoyé (pi
 PARQUET_DIR = DATA_DIR / "parquet"
 PRODUCTS_PARQUET_DIR = PARQUET_DIR / "produits"                   # partitionné par rayon (convert_parquet.py)
 EXPORTS_DIR = DATA_DIR / "exports"                                # exports d'entraînement (TP 12, étape 5)
+DURATIONS_LOG_PATH = DATA_DIR / "durees.jsonl"                    # journal des durées (pipeline, conversion)
 
 # --- Documentation générée ---
 CLEANING_REPORT_PATH = ROOT / "docs" / "data" / "rapport_nettoyage.md"   # rapport avant / après (report.py)
@@ -36,6 +37,15 @@ CLEANING_REPORT_PATH = ROOT / "docs" / "data" / "rapport_nettoyage.md"   # rappo
 RAW_TABLE = "products_nutrition"   # nom de la table brute (extraction, échantillon)
 UNKNOWN_AISLE = "unknown"          # rayon des produits sans groupe alimentaire
 COMPRESSION = "zstd"               # compression de tous les Parquet produits
+
+# Étapes inscrites au journal des durées (écrites par pipeline et convert_parquet, relues par benchmark)
+STEP_READ = "lecture"
+STEP_CLEAN = "nettoyage"
+STEP_WRITE_CLEAN = "ecriture_nettoye"
+STEP_REPORT = "rapport"
+STEP_DB_SCHEMA = "schema_base"
+STEP_DB_LOAD = "chargement_base"
+STEP_CONVERT = "conversion_parquet"
 
 # Licence des données, rappelée dans chaque fichier produit
 LICENSE = "Open Food Facts contributors - ODbL (https://opendatacommons.org/licenses/odbl/1-0/)"

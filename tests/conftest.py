@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from src import create_db, load_db
+from src import config, create_db, load_db  # après l'ajout de la racine au chemin des imports
 
 # Chargé dès l'import de ce fichier, donc avant la collecte des tests (qui lisent TEST_DATABASE_URL à l'import).
 # TEST_DATABASE_URL peut être définie dans db.env ; un export fait dans le terminal l'emporte.
@@ -39,3 +39,16 @@ def test_database():
             returncode=2,
         )
     create_db.create_database_if_missing({**params, "database": name})
+
+
+@pytest.fixture(scope="session", autouse=True)
+def isolated_durations_log(tmp_path_factory):
+    """Pour toute la session : le journal des durées écrit par les tests va dans un dossier temporaire.
+
+    Portée « session » : elle s'applique avant les fixtures de module (une conversion faite par une fixture
+    de module n'écrit donc jamais dans le data/durees.jsonl du dépôt).
+    """
+    with pytest.MonkeyPatch.context() as patch:
+        path = tmp_path_factory.mktemp("durees") / "durees.jsonl"
+        patch.setattr(config, "DURATIONS_LOG_PATH", path)
+        yield path

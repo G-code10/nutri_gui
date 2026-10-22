@@ -4,11 +4,19 @@ Règle d'entrée : une fonction n'arrive ici que si au moins deux modules s'en s
 privée (_), dans le module qui l'utilise. Les fonctions d'ici sont publiques : elles sont faites pour être importées.
 """
 
-from pathlib import Path
+from __future__ import annotations
 
-import pandas as pd
+import datetime
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src import config
+
+# pandas n'est importé que par aisle_code : un module qui n'utilise que les autres fonctions (le benchmark,
+# qui mesure la mémoire de chaque moteur) ne charge pas pandas sans le savoir.
+if TYPE_CHECKING:
+    import pandas as pd
 
 
 def sql_literal(value: str) -> str:
@@ -46,6 +54,8 @@ def aisle_code(food_groups_tag_1: pd.Series) -> pd.Series:
     Le tag est gardé tel quel (« en:fruits-and-vegetables ») : c'est le code de rayon de la base.
     Le slug des partitions Parquet (« en-fruits-and-vegetables ») est calculé à part, en SQL : aisle_slug_sql.
     """
+    import pandas as pd
+
     return food_groups_tag_1.astype("string").replace("", pd.NA).fillna(config.UNKNOWN_AISLE)
 
 
@@ -67,3 +77,24 @@ def markdown_table(headers: list[str], rows: list[list]) -> str:
     lines = ["| " + " | ".join(headers) + " |", "|" + "|".join(" --- " for _ in headers) + "|"]
     lines += ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
     return "\n".join(lines)
+
+
+def append_duration(step: str, seconds: float, rows: int | None, source: str, path: Path | None = None) -> Path:
+    """Ajoute une ligne au journal des durées (JSON Lines) : horodatage, étape, durée, statut, lignes, source.
+
+    `path` vaut config.DURATIONS_LOG_PATH par défaut (lu à l'appel, pas à l'import). Seules les étapes réussies
+    sont inscrites pour l'instant ; les échecs viendront avec l'orchestration du pipeline (TP 13).
+    """
+    path = Path(config.DURATIONS_LOG_PATH if path is None else path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    entry = {
+        "timestamp": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "step": step,
+        "seconds": round(seconds, 3),
+        "status": "ok",
+        "rows": rows,
+        "source": source,
+    }
+    with path.open("a", encoding="utf-8", newline="\n") as log:
+        log.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    return path

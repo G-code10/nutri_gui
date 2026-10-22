@@ -171,3 +171,10 @@ def test_sample_conversion_keeps_clean_rows(tmp_path):
     assert df["code"].is_unique
     folders = {p.name.removeprefix("aisle=") for p in output.iterdir() if p.is_dir()}
     assert folders == set(df["aisle"])
+
+
+def test_conversion_logs_its_duration(clean_parquet, tmp_path):
+    log = tmp_path / "durees.jsonl"
+    cp.convert(clean_parquet, tmp_path / "out", durations_path=log)
+    entry = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
+    assert entry["step"] == config.STEP_CONVERT and entry["rows"] == 4 and entry["status"] == "ok"

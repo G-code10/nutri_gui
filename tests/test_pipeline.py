@@ -1,5 +1,6 @@
 """Tests du pipeline : sans base (rapport, nettoyé écrit et volumes), puis avec une base PostgreSQL de TEST (TEST_DATABASE_URL)."""
 
+import json
 import os
 
 import duckdb
@@ -7,7 +8,7 @@ import pandas as pd
 import pytest
 from psycopg.conninfo import conninfo_to_dict
 
-from src import pipeline
+from src import config, pipeline
 from src.storage import convert_parquet
 
 TEST_DATABASE_URL = os.environ.get("TEST_DATABASE_URL")
@@ -153,3 +154,14 @@ def test_database_and_parquet_count_the_same_products(full_source, tmp_path, cle
     summary = pipeline.run(full_source, tmp_path / "rapport.md", conf=database_conf, clean_path=clean_path)
     count = convert_parquet.convert(clean_path, tmp_path / "parquet" / "produits")
     assert count == summary["tables"]["products"]
+
+
+def test_pipeline_logs_the_duration_of_each_step(source, tmp_path, clean_path):
+    """Sans base : lecture, nettoyage, écriture du nettoyé et rapport sont inscrits au journal des durées."""
+    log = tmp_path / "durees.jsonl"
+    pipeline.run(source, tmp_path / "rapport.md", load_to_db=False, clean_path=clean_path, durations_path=log)
+    entries = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+    assert [entry["step"] for entry in entries] == [
+        config.STEP_READ, config.STEP_CLEAN, config.STEP_WRITE_CLEAN, config.STEP_REPORT,
+    ]
+    assert entries[0]["rows"] == 3 and entries[1]["rows"] == 2
