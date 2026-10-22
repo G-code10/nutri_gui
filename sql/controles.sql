@@ -17,6 +17,8 @@
 --
 -- Les $parametres sont remplacés par run_queries.py avec les constantes de
 -- src/cleaning.py : les contrôles appliquent les tolérances du nettoyage.
+-- $<nom> s'écrit avec un point (syntaxe SQL) ; $<nom>_label avec une virgule,
+-- pour les libellés affichés dans le rapport.
 --
 -- Données : © Open Food Facts contributors — ODbL.
 -- ============================================================================
@@ -73,19 +75,19 @@ WHERE fat_100g NOT BETWEEN 0 AND 100 OR saturated_fat_100g NOT BETWEEN 0 AND 100
    OR salt_100g NOT BETWEEN 0 AND 100 OR sodium_100g NOT BETWEEN 0 AND 100
    OR fruits_vegetables_legumes_100g NOT BETWEEN 0 AND 100
 UNION ALL
-SELECT 2, 'borne', 'énergie hors [0, $kcal_max] kcal', count(*)
+SELECT 2, 'borne', 'énergie hors [0, $kcal_max_label] kcal', count(*)
 FROM produits
 WHERE energy_kcal_100g NOT BETWEEN 0 AND $kcal_max
 UNION ALL
-SELECT 3, 'cohérence', 'sucres > glucides + $sugars_tolerance g', count(*)
+SELECT 3, 'cohérence', 'sucres > glucides + $sugars_tolerance_label g', count(*)
 FROM produits
 WHERE sugars_100g > carbohydrates_100g + $sugars_tolerance
 UNION ALL
-SELECT 4, 'cohérence', 'saturés > lipides + $saturated_tolerance g', count(*)
+SELECT 4, 'cohérence', 'saturés > lipides + $saturated_tolerance_label g', count(*)
 FROM produits
 WHERE saturated_fat_100g > fat_100g + $saturated_tolerance
 UNION ALL
-SELECT 5, 'cohérence', 'sel ≠ sodium × $salt_per_sodium (écart > $salt_sodium_tolerance g)', count(*)
+SELECT 5, 'cohérence', 'sel ≠ sodium × $salt_per_sodium_label (écart > $salt_sodium_tolerance_label g)', count(*)
 FROM produits
 WHERE abs(salt_100g - $salt_per_sodium * sodium_100g) > $salt_sodium_tolerance
 UNION ALL

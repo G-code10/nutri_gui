@@ -128,13 +128,27 @@ def _sql_value(value) -> str:
     return f"{value:g}" if isinstance(value, (int, float)) else str(value)
 
 
+def _label_value(value) -> str:
+    """Valeur d'un paramètre dans un texte affiché : virgule décimale, 0.5 -> « 0,5 »."""
+    return _sql_value(value).replace(".", ",") if isinstance(value, (int, float)) else str(value)
+
+
+def _template_values(parameters: dict) -> dict[str, str]:
+    """Valeurs de substitution : $<nom> (syntaxe SQL) et, pour les nombres, $<nom>_label (libellés affichés)."""
+    values = {name: _sql_value(value) for name, value in parameters.items()}
+    values.update({f"{name}_label": _label_value(value) for name, value in parameters.items()
+                   if isinstance(value, (int, float))})
+    return values
+
+
 def load_queries(path: Path = DEFAULT_SQL, parameters: dict | None = None) -> dict[str, str]:
     """Requêtes du fichier SQL, {nom: requête}, dans l'ordre du fichier, $paramètres remplacés.
 
+    Un nombre s'écrit $<nom> dans une condition (point décimal) et $<nom>_label dans un libellé (virgule).
     Lève ValueError si du SQL précède le premier marqueur, si aucun marqueur n'existe, si un nom est en double
     ou si une requête est vide ; KeyError si un $paramètre n'a pas de valeur.
     """
-    values = {name: _sql_value(value) for name, value in (PARAMETERS if parameters is None else parameters).items()}
+    values = _template_values(PARAMETERS if parameters is None else parameters)
     parts = MARKER.split(Path(path).read_text(encoding="utf-8"))
     preamble, pairs = parts[0], parts[1:]
     if SQL_COMMENT.sub("", preamble).strip():
@@ -262,7 +276,7 @@ def build_markdown(
 ) -> str:
     """Texte de docs/data/controle.md. La date (aujourd'hui par défaut) est la seule donnée variable."""
     date = date or datetime.date.today().isoformat()
-    tolerances = ", ".join(f"{name} = {_sql_value(value)}" for name, value in PARAMETERS.items())
+    tolerances = ", ".join(f"{name} = {_label_value(value)}" for name, value in PARAMETERS.items())
     header = (
         "# Contrôles du stockage analytique\n\n"
         f"- Date : {date}\n- Source : `{source}` ({format_int(parquet.total)} produits)\n- {CREDIT}\n"

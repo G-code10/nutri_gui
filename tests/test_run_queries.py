@@ -84,6 +84,12 @@ def test_load_queries_replaces_every_parameter_with_cleaning_constants():
     assert f"+ {cleaning.SUGARS_TOLERANCE:g}" in queries["bornes_coherences"]
 
 
+def test_labels_use_a_decimal_comma_and_conditions_a_decimal_point():
+    query = rq.load_queries()["bornes_coherences"]
+    assert "'sucres > glucides + 0,5 g'" in query          # libellé affiché
+    assert "sugars_100g > carbohydrates_100g + 0.5" in query   # condition SQL
+
+
 def test_load_queries_refuses_sql_before_the_first_marker(tmp_path):
     path = tmp_path / "bad.sql"
     path.write_text("SELECT 1;\n-- @nom: a\nSELECT 2;\n", encoding="utf-8")

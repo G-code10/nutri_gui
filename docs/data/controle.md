@@ -3,7 +3,7 @@
 - Date : 2026-10-22
 - Source : `data/parquet/produits` (521 240 produits)
 - Données : Open Food Facts contributors - ODbL (https://opendatacommons.org/licenses/odbl/1-0/).
-- Requêtes : `sql/controles.sql` ; paramètres tirés de `src/cleaning.py` : kcal_max = 900, sugars_tolerance = 0.5, saturated_tolerance = 0.5, salt_per_sodium = 2.5, salt_sodium_tolerance = 0.1, alcohol_group = en:alcoholic-beverages
+- Requêtes : `sql/controles.sql` ; paramètres tirés de `src/cleaning.py` : kcal_max = 900, sugars_tolerance = 0,5, saturated_tolerance = 0,5, salt_per_sodium = 2,5, salt_sodium_tolerance = 0,1, alcohol_group = en:alcoholic-beverages
 - Généré par `python -m src.storage.run_queries` : ne pas modifier à la main.
 
 ## Vérifications
@@ -78,9 +78,9 @@ Catégories : 100 % attendu partout, le nettoyage supprime les produits sans cat
 | --- | --- | --- | --- |
 | 1 | borne | nutriment hors [0, 100] g | 0 |
 | 2 | borne | énergie hors [0, 900] kcal | 0 |
-| 3 | cohérence | sucres > glucides + 0.5 g | 0 |
-| 4 | cohérence | saturés > lipides + 0.5 g | 0 |
-| 5 | cohérence | sel ≠ sodium × 2.5 (écart > 0.1 g) | 0 |
+| 3 | cohérence | sucres > glucides + 0,5 g | 0 |
+| 4 | cohérence | saturés > lipides + 0,5 g | 0 |
+| 5 | cohérence | sel ≠ sodium × 2,5 (écart > 0,1 g) | 0 |
 | 6 | cohérence | énergie nulle avec un macronutriment positif (hors alcool) | 33 |
 
 Bornes : 0 attendu. Cohérences : mêmes tolérances que le nettoyage ; les lignes restantes sont listées ici, pas filtrées : une valeur à corriger revient au nettoyage sous forme de règle.
