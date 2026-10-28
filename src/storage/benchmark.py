@@ -56,10 +56,7 @@ BEVERAGES_TAG = "en:beverages"       # rayon de la requête 2 (tag d'origine)...
 BEVERAGES_AISLE = "en-beverages"     # ... et son slug, nom de la partition Parquet
 TOP = 20
 MIN_PRODUCTS_PER_BRAND = 20          # seuil du TP 10 (completude_par_groupe, min_n=20)
-KEY_NUTRIENTS = [
-    "energy_kcal_100g", "fat_100g", "saturated_fat_100g", "carbohydrates_100g",
-    "sugars_100g", "proteins_100g", "salt_100g",
-]
+KEY_NUTRIENTS = config.CORE_NUTRIENTS   # les sept nutriments clés
 
 # Les trois supports de données (mêmes produits, trois formes)
 CLEAN_SUPPORT = "Parquet nettoyé, non partitionné"

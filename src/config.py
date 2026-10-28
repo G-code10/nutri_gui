@@ -38,6 +38,13 @@ RAW_TABLE = "products_nutrition"   # nom de la table brute (extraction, échanti
 UNKNOWN_AISLE = "unknown"          # rayon des produits sans groupe alimentaire
 COMPRESSION = "zstd"               # compression de tous les Parquet produits
 
+# Les sept nutriments clés (complétude du benchmark, filtre de l'export features) ; à ne pas confondre
+# avec cleaning.KEY_NUTRIENTS, liste propre aux règles de nettoyage (kJ et sodium compris)
+CORE_NUTRIENTS = [
+    "energy_kcal_100g", "fat_100g", "saturated_fat_100g", "carbohydrates_100g",
+    "sugars_100g", "proteins_100g", "salt_100g",
+]
+
 # Étapes inscrites au journal des durées (écrites par pipeline et convert_parquet, relues par benchmark)
 STEP_READ = "lecture"
 STEP_CLEAN = "nettoyage"
