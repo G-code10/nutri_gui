@@ -90,3 +90,29 @@ Passé pour le moment
 
 # TP12 - Parquet & DuckDB
 
+### Décisions
+
+- CSV non mesuré dans le benchmark : le format Parquet est retenu depuis le TP 1, toute la chaîne en part. pandas lit le Parquet nettoyé (colonnes utiles seulement) ; le bonus « DuckDB sur CSV » est remplacé par DuckDB sur le Parquet non partitionné, qui mesure l'effet du partitionnement.
+- Requêtes du benchmark choisies d'après l'énoncé du TP 10, l'EDA n'étant pas encore réalisée.
+- Mémoire mesurée par psutil sous Windows (resource n'y existe pas) et par VmHWM sous Linux : ru_maxrss reprenait le pic du processus parent (161 Mo pour tous les moteurs).
+- Deux documents de benchmark : docs/data/benchmark_mesures.md, généré par le script (à ne pas modifier à la main), et docs/data/benchmark.md, rédigé (lecture, limites, conséquences).
+- Journal des durées (data/durees.jsonl) ajouté en anticipation du TP 13 : aucune mesure codée en dur ni saisie à la main, la base n'étant construite que par le pipeline, et le TP 13 le demandera. Contrainte : seules les étapes réussies sont inscrites pour l'instant ; les échecs viendront avec l'orchestration (TP 13).
+- Export features : tolérance de 0,5 conservée dans les filtres (sucres ≤ glucides + 0,5, saturés ≤ lipides + 0,5), comme au nettoyage, au lieu de l'inégalité stricte de l'énoncé.
+- Export features : ratios bornés à [0, 1] (plafond à 1, nombre de produits plafonnés écrit dans le schéma), 0 si numérateur et dénominateur valent 0, NULL si seul le dénominateur vaut 0. Règles propres à l'export, le nettoyage n'est pas modifié. Raison : sur l'extrait France, des dénominateurs minuscules donnaient des ratios jusqu'à 1 million.
+- Export features : schéma nommé features_nutriscore_<AAAAMMJJ>.schema.json (au lieu de schema.json) pour que plusieurs exports datés coexistent dans data/exports/.
+- Export features : politique de manquants « flag », lue dans cleaning.DEFAULT_MISSING_STRATEGY (flag par défaut pour additives_n et les ratios). Les colonnes _missing ne sont pas exportées : la politique est écrite dans le schéma et sera appliquée au TP 14.
+- Les sept nutriments clés sont centralisés dans config.CORE_NUTRIENTS (benchmark et export).
+- Les schémas JSON (schema_produits.json, schéma de l'export) ne sont pas committés : ils restent à côté de leurs données dans data/, ignoré par Git.
+
+### À reprendre plus tard
+
+- Après l'EDA (TP 10) : revoir les requêtes du benchmark et la rédaction de docs/data/benchmark.md.
+- Après les TP 10, 13 et 14 : revoir docs/architecture.md (mentions « À faire », paragraphe de l'exercice 3.5.2, API, assistant, phase 6-7).
+- TP 13 : en fin de session, après les TP 12 et 13, revoir les tests superflus et mettre en commun raw_product, needs_db et TEST_DATABASE_URL dans tests/conftest.py (aujourd'hui répétés dans plusieurs fichiers de test).
+- TP 13 : renommer le paramètre run de run_queries.checks (même nom que la fonction run du module).
+- TP 13 : inscrire aussi les étapes en échec dans le journal des durées (data/durees.jsonl), avec l'orchestration.
+- TP 13 : commande unique qui enchaîne extraction, pipeline, conversion, contrôles et export (déjà signalée dans docs/architecture.md).
+- TP 13 : découpage train / test de l'export features, stratifié sur la cible, avec sa graine, gelé dans data/exports/.
+- TP 14 : appliquer la politique de manquants écrite dans le schéma de l'export (flag), les colonnes _missing n'étant pas exportées.
+
+# TP13 - Pipeline bout-en-bout

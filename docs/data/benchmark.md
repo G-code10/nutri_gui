@@ -14,7 +14,7 @@ Extrait France nettoyé : 521 240 produits, présents sous trois formes (support
 
 | Support | Contenu | Construit par | Lu par |
 |---|---|---|---|
-| Parquet nettoyé, non partitionné | `data/clean/products_clean.parquet`, un seul fichier | le pipeline (`src/pipeline.py`) | pandas, DuckDB |
+| Parquet nettoyé, non partitionné | `data/clean/products_clean.parquet`, un seul fichier | le pipeline (`src/clean_pipeline.py`) | pandas, DuckDB |
 | Base PostgreSQL | tables `products`, `nutrients`, `brands`… | le pipeline (`src/load_db.py`) | PostgreSQL |
 | Parquet partitionné par rayon | `data/parquet/produits/aisle=<slug>/`, un dossier par rayon | `src/storage/convert_parquet.py` | DuckDB |
 

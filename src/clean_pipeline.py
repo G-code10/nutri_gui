@@ -1,6 +1,6 @@
 """Pipeline de bout en bout : lecture -> règles de nettoyage -> nettoyé écrit -> rapport -> base PostgreSQL.
 
-Lancement : python -m src.pipeline [--source data/sample_raw.parquet] [--clean-out data/clean/products_clean.parquet]
+Lancement : python -m src.clean_pipeline [--source data/sample_raw.parquet] [--clean-out data/clean/products_clean.parquet]
                                    [--report docs/data/rapport_nettoyage.md] [--no-db]
 
 Rejouable : sur un nouvel export, il repart de zéro (le nettoyé et le rapport sont réécrits, le schéma de la base
@@ -20,6 +20,8 @@ import pyarrow.parquet as pq
 
 from src import cleaning, config, create_db, load_db, report
 from src.utils import append_duration, display_path
+
+pd.options.mode.copy_on_write = True
 
 DEFAULT_SOURCE = config.RAW_PATH
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH

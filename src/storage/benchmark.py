@@ -587,7 +587,7 @@ def run(
 
     clean_path, parquet_dir = Path(clean_path), Path(parquet_dir)
     if not clean_path.exists():
-        raise FileNotFoundError(f"Nettoyé introuvable : {clean_path} (lancer python -m src.pipeline)")
+        raise FileNotFoundError(f"Nettoyé introuvable : {clean_path} (lancer python -m src.clean_pipeline)")
     if not (parquet_dir / SUCCESS_MARKER).exists():
         raise FileNotFoundError(f"{parquet_dir} incomplet (lancer python -m src.storage.convert_parquet)")
 

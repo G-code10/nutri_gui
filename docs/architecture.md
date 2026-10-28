@@ -14,7 +14,7 @@ data/food.parquet                          source Open Food Facts (champs imbriq
       ▼
 data/raw/*.parquet                         brut aplati : fichier complet, extrait France, échantillon de test
       │
-      │  python -m src.pipeline            (règles de nettoyage du TP 9, src/cleaning.py)
+      │  python -m src.clean_pipeline          (règles de nettoyage du TP 9, src/cleaning.py)
       ▼
 data/clean/products_clean.parquet          nettoyé : SOURCE DE VÉRITÉ UNIQUE
       │                         │
@@ -42,11 +42,11 @@ Chaque étape écrit sa durée dans `data/durees.jsonl` (journal des durées, re
 |---|---|---|---|---|---|
 | Source | export Open Food Facts complet, champs imbriqués | téléchargement (À faire : documenter, `download_parquet.py` étant retiré) | Parquet | `data/food.parquet` | non |
 | Brut | table `products_nutrition` aplatie, non nettoyée : fichier complet (4,6 M de lignes), extrait France (1,2 M), échantillon de test | `src/extract.py`, `scripts/make_sample_raw.py` | Parquet ZSTD | `data/raw/` | non |
-| Nettoyé | sortie de `cleaning.clean()` : extrait France ou fichier complet selon le lancement | `src/pipeline.py` | Parquet ZSTD, un fichier | `data/clean/products_clean.parquet` | non |
-| Base | le même nettoyé, en schéma normalisé (`products`, `nutrients`, `brands`, `categories`, `product_categories`, `aisles`) | `src/pipeline.py` (`create_db`, `load_db`) | PostgreSQL | serveur configuré par `db.env` | non (schéma : `sql/create_db.sql`, dans Git) |
+| Nettoyé | sortie de `cleaning.clean()` : extrait France ou fichier complet selon le lancement | `src/clean_pipeline.py` | Parquet ZSTD, un fichier | `data/clean/products_clean.parquet` | non |
+| Base | le même nettoyé, en schéma normalisé (`products`, `nutrients`, `brands`, `categories`, `product_categories`, `aisles`) | `src/clean_pipeline.py` (`create_db`, `load_db`) | PostgreSQL | serveur configuré par `db.env` | non (schéma : `sql/create_db.sql`, dans Git) |
 | Parquet analytique | le même nettoyé, typé, partitionné par rayon, avec `schema_produits.json` et `_SUCCESS` | `src/storage/convert_parquet.py` | Parquet ZSTD, un dossier par rayon | `data/parquet/produits/` | non |
 | Export features | produits utilisables pour prédire le Nutri-Score (grade a-e, sept nutriments clés, cohérences), figé et daté, avec `features_nutriscore_<AAAAMMJJ>.schema.json` | `src/storage/export_features.py` | Parquet ZSTD, un fichier | `data/exports/` | non (seule la commande est dans Git) |
-| Journal des durées | une ligne par étape réussie : horodatage, étape, durée, lignes, source | `src/pipeline.py`, `convert_parquet.py` | JSON Lines | `data/durees.jsonl` | non |
+| Journal des durées | une ligne par étape réussie : horodatage, étape, durée, lignes, source | `src/clean_pipeline.py`, `convert_parquet.py` | JSON Lines | `data/durees.jsonl` | non |
 | Rapports générés | rapport de nettoyage, contrôles, mesures du benchmark | `report.py`, `run_queries.py`, `benchmark.py` | Markdown | `docs/data/` | oui |
 
 ## 3. Qui lit quoi
@@ -75,7 +75,7 @@ Où le TP 14 lira ses features : dans `data/exports/features_nutriscore_<AAAAMMJ
 
 ```bash
 python -m src.extract --country en:france                                    # brut : extrait France
-python -m src.pipeline --source data/raw/extrait_france.parquet --report /tmp/rapport.md   # nettoyé + base
+python -m src.clean_pipeline --source data/raw/extrait_france.parquet --report /tmp/rapport.md   # nettoyé + base
 python -m src.storage.convert_parquet                                        # Parquet partitionné
 python -m src.storage.run_queries                                            # contrôles Parquet / base
 python -m src.storage.export_features                                        # export features daté (--force pour réécrire)
