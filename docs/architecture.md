@@ -25,9 +25,11 @@ base PostgreSQL                 │
 (products, nutrients,           ├──► contrôles   python -m src.storage.run_queries  (aussi sur la base)
  brands, categories…)           ├──► benchmark   python -m src.storage.benchmark    (aussi sur la base)
       │                         ├──► EDA         notebooks (À faire, TP 10)
-      ▼                         ▼
-API de l'application       data/exports/features_nutriscore_<AAAAMMJJ>.parquet  (À faire, étape 5)
-(À faire)                       │
+      ▼                         │
+API de l'application            │  python -m src.storage.export_features
+(À faire)                       ▼
+                           data/exports/features_nutriscore_<AAAAMMJJ>.parquet  (+ .schema.json)
+                                │
                                 ▼
                            entraînement (À faire, TP 14)
 ```
@@ -43,7 +45,7 @@ Chaque étape écrit sa durée dans `data/durees.jsonl` (journal des durées, re
 | Nettoyé | sortie de `cleaning.clean()` : extrait France ou fichier complet selon le lancement | `src/pipeline.py` | Parquet ZSTD, un fichier | `data/clean/products_clean.parquet` | non |
 | Base | le même nettoyé, en schéma normalisé (`products`, `nutrients`, `brands`, `categories`, `product_categories`, `aisles`) | `src/pipeline.py` (`create_db`, `load_db`) | PostgreSQL | serveur configuré par `db.env` | non (schéma : `sql/create_db.sql`, dans Git) |
 | Parquet analytique | le même nettoyé, typé, partitionné par rayon, avec `schema_produits.json` et `_SUCCESS` | `src/storage/convert_parquet.py` | Parquet ZSTD, un dossier par rayon | `data/parquet/produits/` | non |
-| Export features | produits utilisables pour prédire le Nutri-Score, figé et daté, avec `schema.json` | À faire : `src/storage/export_features.py` (étape 5) | Parquet | `data/exports/` | non (seule la commande est dans Git) |
+| Export features | produits utilisables pour prédire le Nutri-Score (grade a-e, sept nutriments clés, cohérences), figé et daté, avec `features_nutriscore_<AAAAMMJJ>.schema.json` | `src/storage/export_features.py` | Parquet ZSTD, un fichier | `data/exports/` | non (seule la commande est dans Git) |
 | Journal des durées | une ligne par étape réussie : horodatage, étape, durée, lignes, source | `src/pipeline.py`, `convert_parquet.py` | JSON Lines | `data/durees.jsonl` | non |
 | Rapports générés | rapport de nettoyage, contrôles, mesures du benchmark | `report.py`, `run_queries.py`, `benchmark.py` | Markdown | `docs/data/` | oui |
 
@@ -59,14 +61,14 @@ Chaque étape écrit sa durée dans `data/durees.jsonl` (journal des durées, re
 | Assistant (À faire) | À faire : à définir quand l'assistant sera spécifié | À faire | À faire |
 
 Où l'API lira un produit : dans la base PostgreSQL, table `products` (clé `code`), jointe à `nutrients`.
-Où le TP 14 lira ses features : dans `data/exports/features_nutriscore_<AAAAMMJJ>.parquet` et son `schema.json` (À faire, étape 5).
+Où le TP 14 lira ses features : dans `data/exports/features_nutriscore_<AAAAMMJJ>.parquet` et son schéma `features_nutriscore_<AAAAMMJJ>.schema.json` (colonnes, cible, filtres, politique de manquants, SHA-256).
 
 ## 4. Cinq règles
 
 1. Source de vérité unique. La base et le Parquet partent du même nettoyé, produit par une seule exécution du pipeline. Si leurs comptages diffèrent, c'est la chaîne qui est fausse : on corrige la chaîne, pas le rapport. `run_queries.py` le vérifie sur les cinq contrôles.
-2. Données hors Git. Le dépôt contient le code qui produit les données, jamais les données : tout `data/` est ignoré par Git. Seuls les schémas et les rapports générés (`docs/data/`) sont versionnés.
+2. Données hors Git. Le dépôt contient le code qui produit les données, jamais les données : tout `data/` est ignoré par Git. Seuls le schéma SQL (`sql/create_db.sql`) et les rapports générés (`docs/data/`) sont versionnés ; les schémas JSON (`schema_produits.json`, schéma de l'export) restent à côté de leurs données, hors Git.
 3. Parquet reconstruit à chaque exécution. `convert_parquet` supprime le dossier avant d'écrire (aucune partition orpheline), trie les lignes (mêmes données, mêmes fichiers) et écrit `_SUCCESS` en dernier : un dossier sans ce marqueur est incomplet et n'est pas lu.
-4. Export non réécrit. Un export features daté n'est jamais écrasé sans `--force` : un jeu d'entraînement qui change en silence rendrait les modèles incomparables. (À faire, étape 5.)
+4. Export non réécrit. Un export features daté n'est jamais écrasé sans `--force` : un jeu d'entraînement qui change en silence rendrait les modèles incomparables. Réécrit avec `--force` à partir des mêmes données, il est identique (même SHA-256, inscrit dans son schéma).
 5. Partition par rayon seulement. Les analyses filtrent et agrègent surtout par rayon ; une douzaine de partitions reste lisible et efficace (le benchmark mesure un gain de 2,6 fois sur un filtre par rayon). Partitionner aussi par marque ou par grade créerait des milliers de petits fichiers, plus lents à lire. À faire : reprendre ici le paragraphe de l'exercice 3.5.2.
 
 ## 5. Reconstruire tout le stockage
@@ -76,6 +78,7 @@ python -m src.extract --country en:france                                    # b
 python -m src.pipeline --source data/raw/extrait_france.parquet --report /tmp/rapport.md   # nettoyé + base
 python -m src.storage.convert_parquet                                        # Parquet partitionné
 python -m src.storage.run_queries                                            # contrôles Parquet / base
+python -m src.storage.export_features                                        # export features daté (--force pour réécrire)
 ```
 
 À faire : une commande unique qui enchaîne ces étapes (TP 13).
