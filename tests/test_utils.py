@@ -1,4 +1,5 @@
-"""Tests de src/utils.py : échappement SQL, chemins affichés, rayon, options d'écriture Parquet."""
+"""Tests de src/utils.py (échappement SQL, chemins affichés, rayon, options Parquet, journal des durées),
+plus une garde sur les chemins de src/config.py, qui ne contient pas de logique à tester."""
 
 import json
 
@@ -86,3 +87,18 @@ def test_append_duration_adds_one_json_line_per_call(tmp_path):
     assert entries[0] | {"timestamp": None} == {
         "timestamp": None, "step": "nettoyage", "seconds": 1.235, "status": "ok", "rows": 42, "source": "data/raw/x.parquet",
     }
+
+
+# --- Chemins de src/config.py ---
+CONFIG_PATHS = [
+    config.DATA_DIR, config.FOOD_PARQUET, config.RAW_DIR, config.RAW_PATH, config.FRANCE_EXTRACT_PATH,
+    config.SAMPLE_RAW_PATH, config.CLEAN_PATH, config.PARQUET_DIR, config.PRODUCTS_PARQUET_DIR,
+    config.EXPORTS_DIR, config.DURATIONS_LOG_PATH, config.CLEANING_REPORT_PATH,
+]
+
+
+def test_config_paths_are_absolute_and_inside_root():
+    """Tous les chemins de config.py sont absolus et sous la racine du dépôt : aucun chemin d'un poste particulier."""
+    for path in CONFIG_PATHS:
+        assert path.is_absolute()
+        assert path.is_relative_to(config.ROOT)
