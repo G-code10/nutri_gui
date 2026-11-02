@@ -3,27 +3,46 @@
 Une seule requête d'extraction pour tout le dépôt : make_sample_raw.py, le pipeline et le TP 12 la partagent.
 Elle déplie les champs imbriqués (product_name, nutriments...) en colonnes plates, celles que lit cleaning.clean().
 
-Deux usages :
-    python -m src.extract                          # fichier complet  -> data/raw/products_nutrition.parquet
-    python -m src.extract --country en:france      # extrait France   -> data/raw/extrait_france.parquet
+Deux formes de source sont acceptées (étape load du pipeline, TP 13) :
+- imbriquée (data/food.parquet) : extraction par la requête ci-dessous, avec filtre pays éventuel ;
+- déjà aplatie (l'échantillon data/raw/sample_raw.parquet) : recopiée telle quelle, colonnes dans l'ordre de
+  COLUMNS ; le filtre pays y est impossible (countries_tags n'est pas extrait) et refusé.
+La forme est reconnue aux noms de colonnes de la source.
 
-La sortie est réécrite à chaque lancement (rejouable). Elle reste BRUTE : le nettoyage vient après.
+Deux usages :
+    python -m src.extract                          # fichier complet  -> data/raw/products_nutrition_<AAAAMMJJ>.parquet
+    python -m src.extract --country en:france      # extrait France   -> data/raw/france_extract_<AAAAMMJJ>.parquet
+
+À côté du brut, un manifeste <nom>.manifest.json : source, empreinte SHA-256 de la source et du brut, lignes,
+horodatage. Le brut lui-même ne contient aucune date : relancé sur la même source, il est réécrit à l'identique
+(l'ordre des lignes est celui de la source, conservé par DuckDB). Il reste BRUT : le nettoyage vient après.
 
 Données : © Open Food Facts contributors — ODbL (rappel écrit dans les métadonnées du Parquet produit).
 """
 
 import argparse
+import datetime
+import json
+import os
 from pathlib import Path
 
 import duckdb
 
 from src import config
-from src.utils import duckdb_parquet_options, sql_literal
+from src.utils import (
+    dated_path,
+    display_path,
+    duckdb_parquet_options,
+    file_sha256,
+    sql_literal,
+    today,
+)
 
 DEFAULT_SOURCE = config.FOOD_PARQUET
-DEFAULT_OUTPUT = config.RAW_PATH
-DEFAULT_COUNTRY_OUTPUT = config.FRANCE_EXTRACT_PATH
 FRANCE_TAG = "en:france"
+NESTED_MARKER = "nutriments"   # colonne propre à la source imbriquée
+NESTED = "imbriquée"
+FLAT = "aplatie"
 
 # Liste du SELECT : requête de la cartographie (3.2.2), complétée de additives_n et created_t (TP 12)
 SELECT_SQL = """
@@ -81,42 +100,102 @@ def _build_query(source: Path, country: str | None = None) -> str:
     return query
 
 
+def _flat_query(source: Path) -> str:
+    """Recopie d'une source déjà aplatie : les colonnes de COLUMNS, dans cet ordre (une colonne en trop est ignorée)."""
+    return f"SELECT {', '.join(COLUMNS)} FROM read_parquet({sql_literal(source.as_posix())})"
+
+
+def source_format(con: duckdb.DuckDBPyConnection, source: Path) -> str:
+    """NESTED si la source a les champs imbriqués d'Open Food Facts, FLAT si elle a déjà toutes les colonnes de COLUMNS.
+
+    Lève ValueError si elle n'est ni l'une ni l'autre (colonnes manquantes listées).
+    """
+    rows = con.execute(f"DESCRIBE SELECT * FROM read_parquet({sql_literal(source.as_posix())})").fetchall()
+    columns = {row[0] for row in rows}
+    if NESTED_MARKER in columns:
+        return NESTED
+    missing = [column for column in COLUMNS if column not in columns]
+    if missing:
+        raise ValueError(
+            f"Source ni imbriquée (pas de colonne {NESTED_MARKER}) ni aplatie (colonnes absentes : {', '.join(missing)}) : "
+            f"{display_path(source)}"
+        )
+    return FLAT
+
+
 def create_raw_table(
     con: duckdb.DuckDBPyConnection, source: Path, table: str = config.RAW_TABLE, country: str | None = None
 ) -> None:
-    """Crée la table brute `table` dans la connexion (utilisé par make_sample_raw.py)."""
+    """Crée la table brute `table` dans la connexion (utilisé par make_sample_raw.py, source imbriquée)."""
     con.execute(f"CREATE TABLE {table} AS {_build_query(source, country)}")
 
 
-def extract(source: Path, output: Path, country: str | None = None) -> int:
-    """Écrit la table brute en Parquet (ZSTD, licence en métadonnées) ; renvoie le nombre de lignes écrites.
+def manifest_path(output: Path) -> Path:
+    """Manifeste du brut : à côté de lui, même nom suivi de .manifest.json."""
+    return output.with_name(output.stem + ".manifest.json")
 
-    Le fichier de sortie est supprimé avant l'écriture : relancer donne le même résultat, sans reste d'un
-    lancement précédent. Lève FileNotFoundError si la source n'existe pas.
+
+def _write_manifest(source: Path, output: Path, shape: str, country: str | None, rows: int) -> Path:
+    """Écrit le manifeste : d'où vient le brut (source et son empreinte), ce qu'il contient, quand il a été écrit."""
+    manifest = {
+        "name": output.name,
+        "written_at": datetime.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "source": display_path(source),
+        "source_format": shape,
+        "source_bytes": source.stat().st_size,
+        "source_sha256": file_sha256(source),
+        "country": country,
+        "rows": rows,
+        "sha256": file_sha256(output),
+        "columns": COLUMNS,
+        "license": config.LICENSE,
+    }
+    path = manifest_path(output)
+    path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def extract(source: Path, output: Path, country: str | None = None) -> int:
+    """Écrit la table brute en Parquet (ZSTD, licence en métadonnées) et son manifeste ; renvoie le nombre de lignes.
+
+    Le brut est écrit dans un fichier temporaire renommé à la fin : une interruption ne laisse jamais un brut à
+    moitié écrit sous le nom attendu, et relancer remplace la sortie précédente. Lève FileNotFoundError si la
+    source n'existe pas, ValueError si un filtre pays est demandé sur une source déjà aplatie.
     """
     if not source.exists():
         raise FileNotFoundError(f"Parquet source introuvable : {source}")
     output.parent.mkdir(parents=True, exist_ok=True)
-    output.unlink(missing_ok=True)
+    temporary = output.with_name(output.name + ".tmp")
 
     with duckdb.connect() as con:
-        con.execute(
-            f"COPY ({_build_query(source, country)}) TO {sql_literal(output.as_posix())} "
-            f"(FORMAT PARQUET, {duckdb_parquet_options()})"
-        )
-        return con.execute(f"SELECT count(*) FROM read_parquet({sql_literal(output.as_posix())})").fetchone()[0]
+        shape = source_format(con, source)
+        if shape == FLAT and country:
+            raise ValueError(
+                f"Source déjà aplatie ({display_path(source)}) : le filtre pays {country} est impossible "
+                "(lancer sur l'échantillon avec --sample, ou sur une source aplatie avec --full)"
+            )
+        query = _flat_query(source) if shape == FLAT else _build_query(source, country)
+        con.execute(f"COPY ({query}) TO {sql_literal(temporary.as_posix())} (FORMAT PARQUET, {duckdb_parquet_options()})")
+        os.replace(temporary, output)
+        rows = con.execute(f"SELECT count(*) FROM read_parquet({sql_literal(output.as_posix())})").fetchone()[0]
+
+    _write_manifest(source, output, shape, country, rows)
+    return rows
 
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Extrait la table brute products_nutrition du Parquet OFF.")
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="Parquet Open Food Facts")
     parser.add_argument("--country", help=f"tag pays à garder (ex. {FRANCE_TAG}) ; absent = tout le fichier")
-    parser.add_argument("--out", type=Path, help="Parquet de sortie (défaut selon --country)")
+    parser.add_argument("--out", type=Path, help="Parquet de sortie (défaut : daté du jour, selon --country)")
     args = parser.parse_args(argv)
 
-    output = args.out or (DEFAULT_COUNTRY_OUTPUT if args.country else DEFAULT_OUTPUT)
+    if args.out is None and args.country not in (None, FRANCE_TAG):
+        parser.error(f"--out est obligatoire pour un autre pays que {FRANCE_TAG}")
+    prefix = config.FRANCE_EXTRACT_PREFIX if args.country else config.FULL_RAW_PREFIX
+    output = args.out or dated_path(config.RAW_DIR, prefix, today(), ".parquet")
     count = extract(args.source, output, args.country)
-    print(f"{count} lignes écrites dans {output}")
+    print(f"{count} lignes écrites dans {display_path(output)} ; manifeste : {display_path(manifest_path(output))}")
 
 
 if __name__ == "__main__":

@@ -1,5 +1,8 @@
-"""Tests de src/extract.py sur un petit Parquet au format Open Food Facts fabriqué pour l'occasion."""
+"""Tests de src/extract.py sur un petit Parquet au format Open Food Facts fabriqué pour l'occasion,
+puis sur une source déjà aplatie (forme de l'échantillon), et le manifeste écrit à côté du brut."""
 
+import hashlib
+import json
 from pathlib import Path
 
 import duckdb
@@ -148,3 +151,62 @@ def test_paths_with_quote_are_escaped(off_parquet, tmp_path):
 def test_country_with_quote_is_escaped(off_parquet, tmp_path):
     """Une apostrophe dans le tag pays ne casse pas la requête (aucune ligne, pas d'erreur)."""
     assert extract.extract(off_parquet, tmp_path / "x.parquet", "en:côte-d'ivoire") == 0
+
+
+# --- Source déjà aplatie (forme de l'échantillon) et manifeste ---
+@pytest.fixture
+def flat_parquet(off_parquet, tmp_path) -> Path:
+    """Source aplatie : le brut extrait du faux OFF, colonnes dans un autre ordre et une colonne en trop."""
+    raw = tmp_path / "raw.parquet"
+    extract.extract(off_parquet, raw)
+    df = _read(raw)
+    flat = tmp_path / "flat.parquet"
+    df[list(reversed(extract.COLUMNS))].assign(extra=1).to_parquet(flat, index=False)
+    return flat
+
+
+def test_source_format_recognizes_both_shapes(off_parquet, flat_parquet):
+    with duckdb.connect() as con:
+        assert extract.source_format(con, off_parquet) == extract.NESTED
+        assert extract.source_format(con, flat_parquet) == extract.FLAT
+
+
+def test_flat_source_is_copied_with_reference_columns(flat_parquet, tmp_path):
+    """Une source aplatie est recopiée telle quelle, colonnes remises dans l'ordre de COLUMNS, colonne en trop ignorée."""
+    out = tmp_path / "copy.parquet"
+    assert extract.extract(flat_parquet, out) == 3
+    df = _read(out)
+    assert list(df.columns) == extract.COLUMNS
+    assert "0123456789012" in set(df["code"])
+
+
+def test_flat_source_refuses_a_country_filter(flat_parquet, tmp_path):
+    with pytest.raises(ValueError, match="déjà aplatie"):
+        extract.extract(flat_parquet, tmp_path / "x.parquet", extract.FRANCE_TAG)
+
+
+def test_unknown_source_shape_is_refused(tmp_path):
+    source = tmp_path / "autre.parquet"
+    pd.DataFrame({"code": ["1"]}).to_parquet(source)
+    with pytest.raises(ValueError, match="ni imbriquée"):
+        extract.extract(source, tmp_path / "x.parquet")
+
+
+def test_manifest_describes_source_and_output(off_parquet, tmp_path):
+    out = tmp_path / "fr.parquet"
+    extract.extract(off_parquet, out, extract.FRANCE_TAG)
+    manifest = json.loads(extract.manifest_path(out).read_text(encoding="utf-8"))
+    assert manifest["source_sha256"] == hashlib.sha256(off_parquet.read_bytes()).hexdigest()
+    assert manifest["sha256"] == hashlib.sha256(out.read_bytes()).hexdigest()
+    assert (manifest["rows"], manifest["country"], manifest["source_format"]) == (2, extract.FRANCE_TAG, extract.NESTED)
+    assert "written_at" in manifest and "ODbL" in manifest["license"]
+
+
+def test_replay_writes_the_same_bytes(off_parquet, tmp_path):
+    """Relancer sur la même source réécrit le même brut, octet pour octet (l'horodatage est dans le manifeste)."""
+    out = tmp_path / "raw.parquet"
+    extract.extract(off_parquet, out)
+    first = out.read_bytes()
+    extract.extract(off_parquet, out)
+    assert out.read_bytes() == first
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["food.parquet", "raw.manifest.json", "raw.parquet"]
