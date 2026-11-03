@@ -1,7 +1,8 @@
 """Rapport avant / après du nettoyage : généré par ce script, jamais édité à la main.
 
-Lancement : python -m src.report [--source data/raw/products_nutrition.parquet] [--out docs/data/rapport_nettoyage.md]
-Essai rapide sur l'échantillon : python -m src.report --source data/sample_raw.parquet --out /tmp/rapport.md
+Lancement : python -m src.report [--source data/raw/france_extract_<AAAAMMJJ>.parquet] [--out docs/data/rapport_nettoyage.md]
+Sans --source : le brut de l'extrait France le plus récent.
+Essai rapide sur l'échantillon : python -m src.report --source data/raw/sample_raw.parquet --out /tmp/rapport.md
 
 Le rapport ne dépend pas de la base : il compare le DataFrame brut et celui que renvoie cleaning.clean().
 Les anomalies sont recomptées avec leurs propres définitions (celles du diagnostic) et non avec le code
@@ -10,15 +11,20 @@ Il se régénère à l'identique : la date n'apparaît qu'en en-tête, et tous l
 """
 
 import argparse
-import datetime
 from pathlib import Path
 
 import pandas as pd
 
 from src import cleaning, config
-from src.utils import aisle_code, display_path, format_int, markdown_table
+from src.utils import (
+    aisle_code,
+    display_path,
+    format_int,
+    markdown_table,
+    require_input,
+    today,
+)
 
-DEFAULT_SOURCE = config.RAW_PATH   # table complète, produite par extract.py
 DEFAULT_OUTPUT = config.CLEANING_REPORT_PATH
 CREDIT = "Données : Open Food Facts, © Open Food Facts contributors, licence ODbL."
 
@@ -162,7 +168,7 @@ def build_report(
     source: str, date: str | None = None,
 ) -> str:
     """Texte Markdown du rapport. La date (aujourd'hui par défaut) est la seule donnée variable."""
-    date = date or datetime.date.today().isoformat()
+    date = date or today().isoformat()
     header = (
         "# Rapport de nettoyage\n\n"
         f"- Date : {date}\n- Source : `{source}`\n- {CREDIT}\n"
@@ -193,13 +199,16 @@ def generate_report(
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Génère docs/data/rapport_nettoyage.md à partir d'un parquet brut.")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="parquet brut (colonnes de products_nutrition) ; défaut : table complète")
+    parser.add_argument("--source", type=Path, help="parquet brut (colonnes de products_nutrition) ; défaut : extrait France le plus récent")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="fichier Markdown à écrire")
     args = parser.parse_args(argv)
 
-    before = pd.read_parquet(args.source)
+    source = args.source or require_input(
+        config.RAW_DIR, config.FRANCE_EXTRACT_PREFIX, ".parquet", None, "python -m nutriscope.pipeline load"
+    )
+    before = pd.read_parquet(source)
     after, reports = cleaning.clean(before)
-    path = generate_report(before, after, reports, args.out, display_path(args.source))
+    path = generate_report(before, after, reports, args.out, display_path(source))
     print(f"Rapport écrit : {path} ({len(before)} lignes avant, {len(after)} après)")
 
 

@@ -130,7 +130,7 @@ def test_main_clean_out_option(source, tmp_path):
 def test_clean_file_feeds_convert_parquet(full_source, tmp_path, clean_path):
     """Le nettoyé écrit par le pipeline est accepté tel quel par la conversion, sans perte de ligne."""
     summary = clean_pipeline.run(full_source, tmp_path / "rapport.md", load_to_db=False, clean_path=clean_path)
-    count = convert_parquet.convert(clean_path, tmp_path / "parquet" / "produits")
+    count = convert_parquet.convert(clean_path, tmp_path / "parquet" / "products")
     assert count == summary["rows_clean"]
 
 
@@ -152,16 +152,33 @@ def test_pipeline_can_be_replayed(source, tmp_path, clean_path, database_conf):
 def test_database_and_parquet_count_the_same_products(full_source, tmp_path, clean_path, database_conf):
     """Base et Parquet partent du même nettoyé : même nombre de produits (règle du TP 12, étape 2.3)."""
     summary = clean_pipeline.run(full_source, tmp_path / "rapport.md", conf=database_conf, clean_path=clean_path)
-    count = convert_parquet.convert(clean_path, tmp_path / "parquet" / "produits")
+    count = convert_parquet.convert(clean_path, tmp_path / "parquet" / "products")
     assert count == summary["tables"]["products"]
 
 
 def test_pipeline_logs_the_duration_of_each_step(source, tmp_path, clean_path):
     """Sans base : lecture, nettoyage, écriture du nettoyé et rapport sont inscrits au journal des durées."""
-    log = tmp_path / "durees.jsonl"
+    log = tmp_path / "durations.jsonl"
     clean_pipeline.run(source, tmp_path / "rapport.md", load_to_db=False, clean_path=clean_path, durations_path=log)
     entries = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
     assert [entry["step"] for entry in entries] == [
         config.STEP_READ, config.STEP_CLEAN, config.STEP_WRITE_CLEAN, config.STEP_REPORT,
     ]
     assert entries[0]["rows"] == 3 and entries[1]["rows"] == 2
+
+
+def test_clean_returns_volumes_and_written_files(source, tmp_path, clean_path):
+    """clean() seule (étape clean du pipeline) : volumes, nettoyé et rapport écrits, sans toucher à la base."""
+    report_path = tmp_path / "reports" / "cleaning_report.md"
+    summary = clean_pipeline.clean(source, clean_path, report_path)
+    assert (summary["rows_read"], summary["rows_clean"]) == (3, 2)
+    assert summary["clean_path"].exists() and summary["report_path"] == report_path and report_path.exists()
+
+
+@needs_db
+def test_load_database_loads_the_written_clean_file(source, tmp_path, clean_path, database_conf):
+    """load_database() seule (étape load_db) : relit le nettoyé sur disque et le charge entièrement."""
+    clean_pipeline.clean(source, clean_path, tmp_path / "rapport.md")
+    summary = clean_pipeline.load_database(clean_path, database_conf)
+    assert summary["tables"]["products"] == 2
+    assert summary["controls"]["codes en double"] == [(0,)]

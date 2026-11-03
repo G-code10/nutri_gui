@@ -49,7 +49,7 @@ def clean_parquet(tmp_path: Path) -> Path:
 @pytest.fixture
 def converted(clean_parquet: Path, tmp_path: Path) -> Path:
     """Dossier partitionné produit à partir du nettoyé fabriqué."""
-    output = tmp_path / "parquet" / "produits"
+    output = tmp_path / "parquet" / "products"
     cp.convert(clean_parquet, output)
     return output
 
@@ -87,7 +87,7 @@ def test_leading_zero_kept(converted):
 
 
 def test_types_match_schema(converted):
-    """Chaque colonne du Parquet a le type annoncé dans schema_produits.json."""
+    """Chaque colonne du Parquet a le type annoncé dans son schéma (products_<AAAAMMJJ>.schema.json)."""
     schema = json.loads(cp.schema_path(converted).read_text(encoding="utf-8"))
     pattern = (converted / "**" / "*.parquet").as_posix()
     described = duckdb.sql(f"DESCRIBE SELECT * FROM read_parquet('{pattern}', hive_partitioning = true)").fetchall()
@@ -115,6 +115,12 @@ def test_flags_typed_boolean(converted):
     schema = json.loads(cp.schema_path(converted).read_text(encoding="utf-8"))
     types = {c["name"]: c["type"] for c in schema["columns"]}
     assert types["sugars_100g_missing"] == "BOOLEAN"
+
+
+def test_schema_is_named_after_the_folder(converted):
+    """Le schéma d'un dossier products_<AAAAMMJJ> s'appelle products_<AAAAMMJJ>.schema.json, à côté de lui."""
+    assert cp.schema_path(converted) == converted.parent / f"{converted.name}.schema.json"
+    assert cp.schema_path(converted).exists()
 
 
 def test_success_marker_written(converted):
@@ -165,7 +171,7 @@ def test_sample_conversion_keeps_clean_rows(tmp_path):
     clean_df, _ = cleaning.clean(pd.read_parquet(SAMPLE_RAW))
     source = tmp_path / "products_clean.parquet"
     clean_df.to_parquet(source, index=False)
-    output = tmp_path / "produits"
+    output = tmp_path / "products"
     assert cp.convert(source, output) == len(clean_df)
     df = _read(output)
     assert df["code"].is_unique
@@ -174,7 +180,7 @@ def test_sample_conversion_keeps_clean_rows(tmp_path):
 
 
 def test_conversion_logs_its_duration(clean_parquet, tmp_path):
-    log = tmp_path / "durees.jsonl"
+    log = tmp_path / "durations.jsonl"
     cp.convert(clean_parquet, tmp_path / "out", durations_path=log)
     entry = json.loads(log.read_text(encoding="utf-8").splitlines()[-1])
     assert entry["step"] == config.STEP_CONVERT and entry["rows"] == 4 and entry["status"] == "ok"

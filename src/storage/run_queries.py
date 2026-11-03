@@ -8,15 +8,19 @@ bornes) sont remplacés par les constantes de cleaning.py, celles que le nettoya
 Résultat : docs/data/controle.md, avec les vérifications du TP, la concordance Parquet / base et un tableau
 par contrôle. Le fichier se régénère à l'identique : la date n'apparaît qu'en en-tête.
 
+Deux fonctions pour le pipeline (nutriscope/pipeline.py), chacune appelée par son étape :
+- check_database() : les cinq contrôles sur la base seule, juste après son chargement (étape load_db) ;
+- check_parquet_against_database() : les contrôles sur le Parquet, comparés à la base, rapport écrit
+  (étape parquet) ; lève RuntimeError si les deux diffèrent.
+
 Usage (depuis la racine du dépôt) :
-    python -m src.storage.run_queries            # Parquet + base -> docs/data/controle.md
+    python -m src.storage.run_queries            # Parquet le plus récent + base -> docs/data/controle.md
     python -m src.storage.run_queries --no-db    # Parquet seulement (PostgreSQL non lancé)
 
 Données : © Open Food Facts contributors — ODbL.
 """
 
 import argparse
-import datetime
 import math
 import re
 from dataclasses import dataclass
@@ -28,17 +32,19 @@ import duckdb
 import psycopg
 
 from src import cleaning, config, load_db
-from src.storage.convert_parquet import SUCCESS_MARKER
 from src.utils import (
     aisle_slug_sql,
     display_path,
     format_int,
     markdown_table,
+    require_input,
     sql_literal,
+    today,
 )
 
 DEFAULT_SQL = config.ROOT / "sql" / "controles.sql"
-DEFAULT_OUTPUT = config.ROOT / "docs" / "data" / "controle.md"
+DEFAULT_OUTPUT = config.CONTROLS_REPORT_PATH
+SUCCESS_MARKER = config.SUCCESS_MARKER
 CREDIT = f"Données : {config.LICENSE}."
 
 MARKER = re.compile(r"^--\s*@nom:\s*(\w+)\s*$", re.MULTILINE)
@@ -186,7 +192,8 @@ def run_parquet(parquet_dir: Path, queries: dict[str, str]) -> ControlRun:
     parquet_dir = Path(parquet_dir)
     if not (parquet_dir / SUCCESS_MARKER).exists():
         raise FileNotFoundError(
-            f"{parquet_dir} absent ou incomplet (pas de {SUCCESS_MARKER}) : lancer python -m src.storage.convert_parquet"
+            f"{parquet_dir} absent ou incomplet (pas de {SUCCESS_MARKER}) : "
+            "lancer python -m nutriscope.pipeline parquet (convert_parquet)"
         )
     with duckdb.connect() as con:
         con.execute(DUCKDB_VIEW.format(pattern=sql_literal((parquet_dir / "**" / "*.parquet").as_posix())))
@@ -275,7 +282,7 @@ def build_markdown(
     parquet: ControlRun, source: str, database: ControlRun | None = None, date: str | None = None
 ) -> str:
     """Texte de docs/data/controle.md. La date (aujourd'hui par défaut) est la seule donnée variable."""
-    date = date or datetime.date.today().isoformat()
+    date = date or today().isoformat()
     tolerances = ", ".join(f"{name} = {_label_value(value)}" for name, value in PARAMETERS.items())
     header = (
         "# Contrôles du stockage analytique\n\n"
@@ -310,7 +317,7 @@ def build_markdown(
 
 
 def run(
-    parquet_dir: Path = config.PRODUCTS_PARQUET_DIR,
+    parquet_dir: Path,
     sql_path: Path = DEFAULT_SQL,
     output: Path = DEFAULT_OUTPUT,
     conf: dict | None = None,
@@ -336,15 +343,44 @@ def run(
     }
 
 
+def check_database(conf: dict | None = None, sql_path: Path = DEFAULT_SQL) -> dict:
+    """Les cinq contrôles sur la base seule (étape load_db) : {database: ControlRun, checks: [(libellé, réussie ?)]}."""
+    queries = load_queries(sql_path)
+    with load_db.connect(conf) as conn:
+        database = run_postgres(conn, queries)
+    return {"database": database, "checks": checks(database)}
+
+
+def check_parquet_against_database(
+    parquet_dir: Path, output: Path, conf: dict | None = None, sql_path: Path = DEFAULT_SQL
+) -> dict:
+    """Contrôles sur le Parquet, comparés à la base, rapport écrit dans `output` (étape parquet) ; renvoie le résumé de run().
+
+    Lève RuntimeError si le Parquet et la base diffèrent, après avoir écrit le rapport (qui montre les écarts) :
+    ils ne partent pas du même nettoyé, c'est la chaîne qu'il faut corriger.
+    """
+    summary = run(parquet_dir, sql_path, output, conf, use_db=True)
+    different = [name for name, same in summary["identical"].items() if not same]
+    if different:
+        raise RuntimeError(
+            f"Parquet et base différents ({', '.join(different)}) : ils ne partent pas du même nettoyé ; "
+            f"relancer load_db puis parquet (détail : {display_path(summary['output'])})"
+        )
+    return summary
+
+
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Rejoue les cinq contrôles sur le Parquet (et la base).")
-    parser.add_argument("--parquet", type=Path, default=config.PRODUCTS_PARQUET_DIR, help="dossier partitionné")
+    parser.add_argument("--parquet", type=Path, help="dossier partitionné (défaut : le plus récent)")
     parser.add_argument("--sql", type=Path, default=DEFAULT_SQL, help="fichier des requêtes de contrôle")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="fichier Markdown à écrire")
     parser.add_argument("--no-db", action="store_true", help="ne pas interroger la base PostgreSQL")
     args = parser.parse_args(argv)
 
-    summary = run(args.parquet, args.sql, args.out, use_db=not args.no_db)
+    parquet = args.parquet or require_input(
+        config.PARQUET_DIR, config.PRODUCTS_PREFIX, "", None, "python -m nutriscope.pipeline parquet", require_success=True
+    )
+    summary = run(parquet, args.sql, args.out, use_db=not args.no_db)
     for label, ok in summary["checks"]:
         print(f"[{'ok' if ok else 'ÉCHEC'}] {label}")
     if summary["identical"] is not None:

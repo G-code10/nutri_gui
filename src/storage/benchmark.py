@@ -23,7 +23,7 @@ que les bibliothèques de son moteur, et la mémoire mesurée est la sienne.
 Sortie : docs/data/benchmark_mesures.md (généré). L'interprétation va dans docs/data/benchmark.md, rédigé à la main.
 
 Usage (depuis la racine du dépôt) :
-    python -m src.storage.benchmark                  # quatre moteurs, trois répétitions
+    python -m src.storage.benchmark                  # quatre moteurs, trois répétitions, supports les plus récents
     python -m src.storage.benchmark --no-db          # sans PostgreSQL
     python -m src.storage.benchmark --repeat 5
 
@@ -570,8 +570,8 @@ def build_markdown(context: dict, date: str | None = None) -> str:
 
 
 def run(
-    clean_path: Path = config.CLEAN_PATH,
-    parquet_dir: Path = config.PRODUCTS_PARQUET_DIR,
+    clean_path: Path | None = None,
+    parquet_dir: Path | None = None,
     output: Path = DEFAULT_OUTPUT,
     conf: dict | None = None,
     use_db: bool = True,
@@ -579,17 +579,25 @@ def run(
     engines: list[str] | None = None,
     durations_path: Path | None = None,
 ) -> dict:
-    """Vérifie, mesure, écrit le rapport ; renvoie le contexte du rapport (mesures résumées comprises)."""
+    """Vérifie, mesure, écrit le rapport ; renvoie le contexte du rapport (mesures résumées comprises).
+
+    Sans `clean_path` ni `parquet_dir` : le nettoyé et le Parquet partitionné les plus récents de data/.
+    """
     import duckdb
 
-    from src.storage.convert_parquet import SUCCESS_MARKER
-    from src.utils import display_path, sql_literal
+    from src.utils import display_path, require_input, sql_literal
 
+    if clean_path is None:
+        clean_path = require_input(config.CLEAN_DIR, config.CLEAN_PREFIX, ".parquet", None,
+                                   "python -m nutriscope.pipeline clean")
+    if parquet_dir is None:
+        parquet_dir = require_input(config.PARQUET_DIR, config.PRODUCTS_PREFIX, "", None,
+                                    "python -m nutriscope.pipeline parquet", require_success=True)
     clean_path, parquet_dir = Path(clean_path), Path(parquet_dir)
     if not clean_path.exists():
-        raise FileNotFoundError(f"Nettoyé introuvable : {clean_path} (lancer python -m src.clean_pipeline)")
-    if not (parquet_dir / SUCCESS_MARKER).exists():
-        raise FileNotFoundError(f"{parquet_dir} incomplet (lancer python -m src.storage.convert_parquet)")
+        raise FileNotFoundError(f"Nettoyé introuvable : {clean_path} (lancer python -m nutriscope.pipeline clean)")
+    if not (parquet_dir / config.SUCCESS_MARKER).exists():
+        raise FileNotFoundError(f"{parquet_dir} incomplet (lancer python -m nutriscope.pipeline parquet)")
 
     engines = list(engines or ENGINES)
     if not use_db and "postgres" in engines:
@@ -637,8 +645,8 @@ def run(
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Benchmark : trois requêtes, trois moteurs, temps et mémoire.")
     parser.add_argument("--one", nargs=2, metavar=("MOTEUR", "REQUÊTE"), help="une seule mesure (sous-processus)")
-    parser.add_argument("--clean", type=Path, default=config.CLEAN_PATH, help="Parquet nettoyé")
-    parser.add_argument("--parquet", type=Path, default=config.PRODUCTS_PARQUET_DIR, help="Parquet partitionné")
+    parser.add_argument("--clean", type=Path, help="Parquet nettoyé (défaut : le plus récent)")
+    parser.add_argument("--parquet", type=Path, help="Parquet partitionné (défaut : le plus récent)")
     parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="rapport Markdown des mesures")
     parser.add_argument("--repeat", type=int, default=3, help="répétitions par mesure")
     parser.add_argument("--engines", nargs="+", choices=list(ENGINES), help="moteurs à mesurer (défaut : tous)")

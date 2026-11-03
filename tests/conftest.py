@@ -46,9 +46,9 @@ def isolated_durations_log(tmp_path_factory):
     """Pour toute la session : le journal des durées écrit par les tests va dans un dossier temporaire.
 
     Portée « session » : elle s'applique avant les fixtures de module (une conversion faite par une fixture
-    de module n'écrit donc jamais dans le data/durees.jsonl du dépôt).
+    de module n'écrit donc jamais dans le data/durations.jsonl du dépôt).
     """
     with pytest.MonkeyPatch.context() as patch:
-        path = tmp_path_factory.mktemp("durees") / "durees.jsonl"
+        path = tmp_path_factory.mktemp("durations") / "durations.jsonl"
         patch.setattr(config, "DURATIONS_LOG_PATH", path)
         yield path

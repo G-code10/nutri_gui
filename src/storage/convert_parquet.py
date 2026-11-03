@@ -1,16 +1,16 @@
 """Conversion du nettoyé en Parquet partitionné par rayon (TP 12, étape 1).
 
 Entrée : le Parquet nettoyé (sortie de cleaning.clean(), écrite par le pipeline).
-Sortie : data/parquet/produits/aisle=<slug>/…, types posés dans le SELECT, compression ZSTD,
-         puis data/parquet/schema_produits.json à côté, puis le marqueur _SUCCESS en dernier.
+Sortie : data/parquet/products_<AAAAMMJJ>/aisle=<slug>/…, types posés dans le SELECT, compression ZSTD,
+         puis data/parquet/products_<AAAAMMJJ>.schema.json à côté, puis le marqueur _SUCCESS en dernier.
 
 Rejouable : le dossier cible est supprimé avant l'écriture (aucune partition orpheline), et les lignes
 sont triées avant l'écriture (mêmes données en entrée = mêmes fichiers en sortie).
 Les chemins sont des paramètres : les valeurs par défaut ne servent qu'en ligne de commande.
 
 Usage (depuis la racine du dépôt) :
-    python -m src.storage.convert_parquet
-    python -m src.storage.convert_parquet --source data/clean/products_clean.parquet --out data/parquet/produits
+    python -m src.storage.convert_parquet        # nettoyé le plus récent -> dossier daté du jour
+    python -m src.storage.convert_parquet --source data/clean/products_clean_20261102.parquet --out data/parquet/products_20261102
 
 Données : © Open Food Facts contributors — ODbL (rappel écrit dans les Parquet et dans le schéma).
 """
@@ -19,7 +19,6 @@ import argparse
 import json
 import shutil
 import time
-from datetime import date
 from pathlib import Path
 
 import duckdb
@@ -29,15 +28,16 @@ from src.config import COMPRESSION, LICENSE
 from src.utils import (
     aisle_slug_sql,
     append_duration,
+    dated_path,
     display_path,
     duckdb_parquet_options,
+    require_input,
     sql_literal,
+    today,
 )
 
-DEFAULT_SOURCE = config.CLEAN_PATH
-DEFAULT_OUTPUT = config.PRODUCTS_PARQUET_DIR
-SCHEMA_FILENAME = "schema_produits.json"
-SUCCESS_MARKER = "_SUCCESS"
+SCHEMA_SUFFIX = ".schema.json"
+SUCCESS_MARKER = config.SUCCESS_MARKER
 
 PARTITION_KEY = "aisle"
 
@@ -115,12 +115,12 @@ def _build_query(source: Path, typed: list[tuple[str, str, str, str]]) -> str:
 
 
 def schema_path(output: Path) -> Path:
-    """Emplacement du schéma : à côté du dossier partitionné."""
-    return output.parent / SCHEMA_FILENAME
+    """Emplacement du schéma : à côté du dossier partitionné, products_<AAAAMMJJ>.schema.json."""
+    return output.parent / f"{output.name}{SCHEMA_SUFFIX}"
 
 
 def _write_schema(output: Path, source: Path, typed: list, row_count: int, aisles: list[str]) -> Path:
-    """Écrit schema_produits.json : colonnes (type + justification), partition, compression, volumes, licence."""
+    """Écrit le schéma (schema_path) : colonnes (type + justification), partition, compression, volumes, licence."""
     columns = [{"name": name, "type": sql_type, "justification": reason} for name, _, sql_type, reason in typed]
     columns.append({
         "name": PARTITION_KEY, "type": "VARCHAR",
@@ -128,7 +128,7 @@ def _write_schema(output: Path, source: Path, typed: list, row_count: int, aisle
     })
     schema = {
         "name": output.name,
-        "generated_on": date.today().isoformat(),
+        "generated_on": today().isoformat(),
         "source": display_path(source),
         "partition_key": PARTITION_KEY,
         "partitions": aisles,
@@ -151,7 +151,7 @@ def convert(source: Path, output: Path, durations_path: Path | None = None) -> i
     """
     started = time.perf_counter()
     if not source.exists():
-        raise FileNotFoundError(f"Nettoyé introuvable : {source} (lancer d'abord le pipeline de nettoyage)")
+        raise FileNotFoundError(f"Nettoyé introuvable : {source} (lancer d'abord l'étape de nettoyage : python -m nutriscope.pipeline clean)")
 
     with duckdb.connect() as con:
         typed = _typed_columns(_source_columns(con, source))
@@ -179,12 +179,16 @@ def convert(source: Path, output: Path, durations_path: Path | None = None) -> i
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Convertit le nettoyé en Parquet partitionné par rayon.")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="Parquet nettoyé")
-    parser.add_argument("--out", type=Path, default=DEFAULT_OUTPUT, help="dossier partitionné de sortie")
+    parser.add_argument("--source", type=Path, help="Parquet nettoyé (défaut : le plus récent)")
+    parser.add_argument("--out", type=Path, help="dossier partitionné de sortie (défaut : daté du jour)")
     args = parser.parse_args(argv)
 
-    count = convert(args.source, args.out)
-    print(f"{count} lignes écrites dans {args.out} ; schéma : {schema_path(args.out)}")
+    source = args.source or require_input(
+        config.CLEAN_DIR, config.CLEAN_PREFIX, ".parquet", None, "python -m nutriscope.pipeline clean"
+    )
+    output = args.out or dated_path(config.PARQUET_DIR, config.PRODUCTS_PREFIX, today())
+    count = convert(source, output)
+    print(f"{count} lignes écrites dans {display_path(output)} ; schéma : {display_path(schema_path(output))}")
 
 
 if __name__ == "__main__":

@@ -1,41 +1,61 @@
-"""Export features daté pour prédire le Nutri-Score (TP 12, étape 5).
+"""Export features daté pour prédire le Nutri-Score (TP 12, étape 5), avec son split train / test figé (TP 13).
 
 Entrée : le Parquet partitionné par rayon (convert_parquet), refusé s'il n'a pas son marqueur _SUCCESS.
 Sortie : data/exports/features_nutriscore_<AAAAMMJJ>.parquet et features_nutriscore_<AAAAMMJJ>.schema.json.
 
 Un export est figé : il n'est jamais réécrit sans --force (un jeu d'entraînement qui change en silence
-rendrait les modèles incomparables). Réécrit avec --force à partir des mêmes données, il est identique
-octet pour octet (même SHA-256) : lignes triées par code, aucune date dans les données, licence en métadonnées.
-Le découpage entraînement / test n'est pas fait ici (TP 13).
+rendrait les modèles incomparables), ni supprimé par le pipeline. Réécrit avec --force à partir des mêmes
+données, il est identique octet pour octet (même SHA-256) : lignes triées par code, split tiré avec une graine
+fixe, aucune date dans les données, licence en métadonnées.
+
+Split : colonne `split` (train ou test), stratifiée sur nutriscore_grade. Pour chaque grade, les produits triés
+par code sont mélangés par un générateur propre au grade (graine SPLIT_SEED combinée au rang du grade), et les
+TEST_FRACTION premiers vont en test : chaque grade a la même part de test, à un produit près, et la même graine
+redonne la même affectation produit par produit.
 
 Usage (depuis la racine du dépôt) :
-    python -m src.storage.export_features
-    python -m src.storage.export_features --source data/parquet/produits --out-dir data/exports --force
+    python -m src.storage.export_features            # Parquet partitionné le plus récent -> export daté du jour
+    python -m src.storage.export_features --source data/parquet/products_20261102 --out-dir data/exports --force
 
 Données : © Open Food Facts contributors — ODbL (rappel écrit dans le Parquet et dans le schéma).
 """
 
 import argparse
-import hashlib
 import json
+import math
 import os
 import subprocess
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import duckdb
+import numpy as np
+import pyarrow as pa
 
 from src import cleaning, config
 from src.storage.convert_parquet import PARTITION_KEY, SUCCESS_MARKER
-from src.utils import display_path, duckdb_parquet_options, format_int, sql_literal
+from src.utils import (
+    display_path,
+    duckdb_parquet_options,
+    file_sha256,
+    format_int,
+    require_input,
+    sql_literal,
+    today,
+)
 
-DEFAULT_SOURCE = config.PRODUCTS_PARQUET_DIR
 DEFAULT_OUT_DIR = config.EXPORTS_DIR
 EXPORT_PREFIX = "features_nutriscore"
 
 TARGET = "nutriscore_grade"
 IDENTIFIER = "code"
+SPLIT = "split"
 GRADES = ["a", "b", "c", "d", "e"]
+
+# Split train / test : graine fixe (écrite dans le schéma) et part de test, la même pour chaque grade
+SPLIT_SEED = 42
+TEST_FRACTION = 0.2
+TRAIN, TEST = "train", "test"
 
 # Ratios : nom -> (numérateur SQL, dénominateur SQL, description)
 RATIOS = {
@@ -65,10 +85,11 @@ COLUMNS = {
     **{name: ("DOUBLE", "ratio 0 à 1", description, "feature") for name, (_, _, description) in RATIOS.items()},
     "nutriscore_score": ("SMALLINT", "points", "score Nutri-Score dont le grade est déduit", "interdit"),
     "nutriscore_grade": ("VARCHAR", None, "grade Nutri-Score a à e", "cible"),
+    SPLIT: ("VARCHAR", None, f"{TRAIN} ou {TEST} : split figé, stratifié sur le grade (graine {SPLIT_SEED})", "split"),
 }
 
-# Colonnes jamais manquantes : filtrées (nutriments clés, cible) ou toujours renseignées (code, rayon)
-NEVER_MISSING = {IDENTIFIER, PARTITION_KEY, TARGET, *config.CORE_NUTRIENTS}
+# Colonnes jamais manquantes : filtrées (nutriments clés, cible), toujours renseignées (code, rayon) ou calculées (split)
+NEVER_MISSING = {IDENTIFIER, PARTITION_KEY, TARGET, SPLIT, *config.CORE_NUTRIENTS}
 NEVER_MISSING_POLICY = "aucune : jamais manquante dans l'export"
 DEFAULT_POLICY = "flag"   # colonnes absentes de cleaning.DEFAULT_MISSING_STRATEGY (additives_n, ratios)
 
@@ -87,12 +108,24 @@ FILTERS = [
 ]
 
 USAGE = {
-    "prevu": "entraînement et évaluation d'un modèle prédisant nutriscore_grade (TP 14) ; découpage train / test au TP 13",
+    "prevu": "entraînement et évaluation d'un modèle prédisant nutriscore_grade (TP 14 à 16), sur le split de ce fichier",
     "interdits": [
+        "recalculer le split : utiliser la colonne split telle quelle",
         "utiliser nutriscore_score comme feature : le grade en est déduit (fuite de la cible)",
         "utiliser code comme feature : identifiant, sans information nutritionnelle",
+        "utiliser product_name ou brands comme features (absents de l'export)",
     ],
 }
+SPLIT_RULES = [
+    "fit (modèle, imputation, normalisation) sur le train seulement",
+    "le test n'est regardé qu'une fois, à la fin",
+    "la validation croisée se fait à l'intérieur du train",
+]
+SPLIT_METHOD = (
+    f"stratifié sur {TARGET} : pour chaque grade, produits triés par code, mélangés par "
+    "numpy.random.default_rng([graine, rang du grade dans a-e]) ; les premiers, arrondi de "
+    "part de test × effectif, vont en test"
+)
 
 
 def export_paths(out_dir: Path, frozen_on: date) -> tuple[Path, Path]:
@@ -105,8 +138,8 @@ def _check_source(source: Path) -> None:
     """Lève FileNotFoundError si le dossier partitionné est absent ou incomplet (sans _SUCCESS)."""
     if not (source / SUCCESS_MARKER).exists():
         raise FileNotFoundError(
-            f"Parquet partitionné absent ou incomplet (pas de {SUCCESS_MARKER}) : {source} "
-            "(lancer d'abord python -m src.storage.convert_parquet)"
+            f"Parquet partitionné absent ou incomplet (pas de {SUCCESS_MARKER}) : {display_path(source)} "
+            "(lancer d'abord python -m nutriscope.pipeline parquet, qui appelle convert_parquet)"
         )
 
 
@@ -119,9 +152,11 @@ def _ratio_sql(numerator: str, denominator: str) -> str:
 
 
 def _select_list() -> str:
-    """Expressions typées des colonnes de l'export, dans l'ordre de COLUMNS."""
+    """Expressions typées des colonnes lues ou calculées en SQL, dans l'ordre de COLUMNS (split exclu : ajouté après)."""
     expressions = []
     for name, (sql_type, _, _, _) in COLUMNS.items():
+        if name == SPLIT:
+            continue
         if name in RATIOS:
             numerator, denominator, _ = RATIOS[name]
             expression = _ratio_sql(numerator, denominator)
@@ -146,6 +181,24 @@ def _build_query(source: Path) -> str:
         f"    WHERE {where}\n"
         f"    ORDER BY {IDENTIFIER}"
     )
+
+
+def assign_split(codes: np.ndarray, grades: np.ndarray, seed: int = SPLIT_SEED,
+                 test_fraction: float = TEST_FRACTION) -> np.ndarray:
+    """train ou test pour chaque produit, stratifié sur le grade ; `codes` et `grades` alignés, triés par code.
+
+    Un générateur local par grade (graine [seed, rang du grade]) : l'affectation d'un grade ne dépend ni des
+    autres grades, ni d'un hasard global. Part de test d'un grade : arrondi (au plus proche) de effectif × fraction.
+    """
+    if list(codes) != sorted(codes):
+        raise ValueError("assign_split attend des produits triés par code (affectation reproductible)")
+    split = np.full(len(codes), TRAIN, dtype=object)
+    for rank, grade in enumerate(GRADES):
+        positions = np.flatnonzero(grades == grade)
+        test_count = math.floor(len(positions) * test_fraction + 0.5)
+        shuffled = np.random.default_rng([seed, rank]).permutation(positions)
+        split[shuffled[:test_count]] = TEST
+    return split
 
 
 def _capped_counts(con: duckdb.DuckDBPyConnection, source: Path) -> dict[str, int]:
@@ -175,13 +228,16 @@ def _git(*args: str) -> str | None:
     return result.stdout.strip()
 
 
-def _sha256(path: Path) -> str:
-    """Empreinte SHA-256 du fichier, lu par blocs."""
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for block in iter(lambda: file.read(1 << 20), b""):
-            digest.update(block)
-    return digest.hexdigest()
+def _split_counts(con: duckdb.DuckDBPyConnection, table: str) -> dict[str, dict]:
+    """Effectifs train et test par grade, et part de test en %, lus dans le fichier écrit."""
+    rows = con.execute(
+        f"SELECT {TARGET}, count(*) FILTER ({SPLIT} = '{TRAIN}'), count(*) FILTER ({SPLIT} = '{TEST}') "
+        f"FROM read_parquet({table}) GROUP BY {TARGET} ORDER BY {TARGET}"
+    ).fetchall()
+    return {
+        grade: {TRAIN: train, TEST: test, "test_pct": round(100 * test / (train + test), 2)}
+        for grade, train, test in rows
+    }
 
 
 def _write_schema(con, path: Path, export: Path, source: Path, frozen_on: date, capped: dict[str, int]) -> dict:
@@ -210,11 +266,19 @@ def _write_schema(con, path: Path, export: Path, source: Path, frozen_on: date, 
         "git_commit": _git("rev-parse", "HEAD"),
         "git_dirty": None if status is None else bool(status),
         "rows": rows,
-        "sha256": _sha256(export),
+        "sha256": file_sha256(export),
         "target": TARGET,
         "identifier": IDENTIFIER,
         "filters": [description for _, description in FILTERS],
         "target_distribution": distribution,
+        "split": {
+            "column": SPLIT,
+            "method": SPLIT_METHOD,
+            "seed": SPLIT_SEED,
+            "test_fraction": TEST_FRACTION,
+            "counts": _split_counts(con, table),
+            "rules": SPLIT_RULES,
+        },
         "ratios": {
             "bornes": f"0 à {RATIO_MAX} ; 0 si numérateur et dénominateur valent 0 ; NULL si seul le dénominateur vaut 0",
             "capped": capped,
@@ -228,24 +292,28 @@ def _write_schema(con, path: Path, export: Path, source: Path, frozen_on: date, 
 
 
 def export(source: Path, out_dir: Path, frozen_on: date | None = None, force: bool = False) -> dict:
-    """Écrit l'export features daté et son schéma ; renvoie le schéma.
+    """Écrit l'export features daté, avec son split, et son schéma ; renvoie le schéma.
 
     `frozen_on` : date de gel, aujourd'hui par défaut (elle nomme les fichiers, elle n'est pas dans les données).
     Lève FileNotFoundError si la source est incomplète, FileExistsError si l'export existe déjà sans `force`.
     Le Parquet est écrit dans un fichier temporaire puis renommé : un export interrompu ne laisse pas de fichier.
     """
     _check_source(source)
-    frozen_on = frozen_on or datetime.now().astimezone().date()   # date locale
+    frozen_on = frozen_on or today()
     parquet_path, schema_file = export_paths(out_dir, frozen_on)
     if parquet_path.exists() and not force:
-        raise FileExistsError(f"Export déjà présent : {parquet_path} (--force pour le réécrire)")
+        raise FileExistsError(f"Export déjà présent : {display_path(parquet_path)} (--force pour le réécrire)")
 
     out_dir.mkdir(parents=True, exist_ok=True)
     temporary = parquet_path.with_suffix(".parquet.tmp")
     with duckdb.connect() as con:
+        con.execute(f"CREATE TEMP TABLE features AS {_build_query(source)}")
+        selected = con.execute(f"SELECT {IDENTIFIER}, {TARGET} FROM features ORDER BY {IDENTIFIER}").fetchnumpy()
+        split = assign_split(selected[IDENTIFIER], selected[TARGET])
+        con.register("splits", pa.table({IDENTIFIER: selected[IDENTIFIER], SPLIT: split.astype(str)}))
         con.execute(
-            f"COPY ({_build_query(source)}) TO {sql_literal(temporary.as_posix())} "
-            f"(FORMAT PARQUET, {duckdb_parquet_options()})"
+            f"COPY (SELECT f.*, s.{SPLIT} FROM features f JOIN splits s USING ({IDENTIFIER}) ORDER BY {IDENTIFIER}) "
+            f"TO {sql_literal(temporary.as_posix())} (FORMAT PARQUET, {duckdb_parquet_options()})"
         )
         os.replace(temporary, parquet_path)
         return _write_schema(con, schema_file, parquet_path, source, frozen_on, _capped_counts(con, source))
@@ -253,12 +321,15 @@ def export(source: Path, out_dir: Path, frozen_on: date | None = None, force: bo
 
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Exporte les features datées pour prédire le Nutri-Score.")
-    parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE, help="dossier Parquet partitionné")
+    parser.add_argument("--source", type=Path, help="dossier Parquet partitionné (défaut : le plus récent)")
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="dossier des exports")
     parser.add_argument("--force", action="store_true", help="réécrire l'export du jour s'il existe")
     args = parser.parse_args(argv)
 
-    schema = export(args.source, args.out_dir, force=args.force)
+    source = args.source or require_input(
+        config.PARQUET_DIR, config.PRODUCTS_PREFIX, "", None, "python -m nutriscope.pipeline parquet", require_success=True
+    )
+    schema = export(source, args.out_dir, force=args.force)
     parquet_path, schema_file = export_paths(args.out_dir, date.fromisoformat(schema["frozen_on"]))
     print(f"{format_int(schema['rows'])} produits écrits dans {display_path(parquet_path)} ; "
           f"schéma : {display_path(schema_file)} ; SHA-256 : {schema['sha256']}")
