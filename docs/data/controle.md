@@ -1,7 +1,7 @@
 # Contrôles du stockage analytique
 
-- Date : 2026-10-22
-- Source : `data/parquet/produits` (521 240 produits)
+- Date : 2026-11-09
+- Source : `data/parquet/products_20261109` (521 240 produits)
 - Données : Open Food Facts contributors - ODbL (https://opendatacommons.org/licenses/odbl/1-0/).
 - Requêtes : `sql/controles.sql` ; paramètres tirés de `src/cleaning.py` : kcal_max = 900, sugars_tolerance = 0,5, saturated_tolerance = 0,5, salt_per_sodium = 2,5, salt_sodium_tolerance = 0,1, alcohol_group = en:alcoholic-beverages
 - Généré par `python -m src.storage.run_queries` : ne pas modifier à la main.
