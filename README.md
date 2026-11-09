@@ -56,3 +56,4 @@ python -m pytest -q -rs
 ```
 
 Les tests qui utilisent la base lisent TEST_DATABASE_URL (dans db.env) et visent une base de test, jamais la vraie. Le conteneur PostgreSQL doit être lancé.
+Les tests sur données réelles sont ignorés si data/raw/sample_raw.parquet est absent(voir 2)
