@@ -1,5 +1,5 @@
 # Fiche idendité du projet
-# permet l'appel de fonction depuis n'importe quel endroit du dossier
+# permet l'appel de fonction depuis n'importe quel endroit du dossier, faire pip install -e avant pour ajouter les dossier dans le venv
 
 [build-system]
 requires = ["setuptools>=69"]
