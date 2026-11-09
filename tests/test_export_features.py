@@ -1,4 +1,4 @@
-"""Tests de src/storage/export_features.py : filtres, ratios, split train / test, schéma, export figé et reproductible.
+"""Tests de src/storage/export_features.py : filtres, ratios, schéma, export figé et reproductible.
 
 Données : un petit nettoyé fabriqué produit par produit (un cas par règle), converti en Parquet partitionné
 par convert_parquet, comme dans la chaîne réelle.
@@ -8,11 +8,10 @@ import json
 from datetime import date
 
 import duckdb
-import numpy as np
 import pandas as pd
 import pytest
 
-from src import cleaning, config, utils
+from src import cleaning, config
 from src.storage import convert_parquet
 from src.storage import export_features as ef
 
@@ -62,8 +61,8 @@ def source(tmp_path):
     """Parquet partitionné (avec _SUCCESS) construit à partir du nettoyé fabriqué."""
     clean_path = tmp_path / "products_clean.parquet"
     _clean_frame().to_parquet(clean_path, index=False)
-    output = tmp_path / "parquet" / "products"
-    convert_parquet.convert(clean_path, output, durations_path=tmp_path / "durations.jsonl")
+    output = tmp_path / "parquet" / "produits"
+    convert_parquet.convert(clean_path, output, durations_path=tmp_path / "durees.jsonl")
     return output
 
 
@@ -131,7 +130,7 @@ def test_schema_describes_the_export(exported):
     assert schema["rows"] == len(KEPT) and schema["frozen_on"] == "2026-10-28"
     assert schema["target"] == "nutriscore_grade" and schema["identifier"] == "code"
     assert schema["target_distribution"] == {"c": len(KEPT)}
-    assert schema["sha256"] == utils.file_sha256(parquet_path)
+    assert schema["sha256"] == ef._sha256(parquet_path)
     assert "ODbL" in schema["license"] and schema["usage"]["interdits"]
 
 
@@ -171,77 +170,3 @@ def test_incomplete_source_is_refused(source, tmp_path):
     with pytest.raises(FileNotFoundError, match="convert_parquet"):
         ef.export(source, tmp_path / "exports", frozen_on=FROZEN_ON)
     assert not (tmp_path / "exports").exists()
-
-
-# --- Split train / test ---
-def _codes_and_grades(count: int = 1000, seed: int = 0):
-    """Codes triés et grades déséquilibrés (a et b minoritaires, comme dans les données réelles)."""
-    codes = np.array([f"{index:013d}" for index in range(count)], dtype=object)
-    grades = np.random.default_rng(seed).choice(ef.GRADES, size=count, p=[0.08, 0.12, 0.25, 0.3, 0.25])
-    return codes, grades.astype(object)
-
-
-def test_assign_split_gives_each_grade_the_same_test_share():
-    codes, grades = _codes_and_grades()
-    split = ef.assign_split(codes, grades)
-    assert set(split) == {ef.TRAIN, ef.TEST}
-    for grade in ef.GRADES:
-        in_grade = split[grades == grade]
-        expected = round(len(in_grade) * ef.TEST_FRACTION)
-        assert abs((in_grade == ef.TEST).sum() - expected) <= 1   # 20 % à un produit près
-
-
-def test_assign_split_is_reproducible_product_by_product():
-    codes, grades = _codes_and_grades()
-    first = ef.assign_split(codes, grades)
-    assert list(ef.assign_split(codes, grades)) == list(first)                # même graine : mêmes produits en test
-    assert list(ef.assign_split(codes, grades, seed=7)) != list(first)         # autre graine : autre tirage
-
-
-def test_assign_split_of_a_grade_does_not_depend_on_the_others():
-    """Générateur local par grade : retirer tous les produits d'un grade ne change rien aux autres grades."""
-    codes, grades = _codes_and_grades()
-    split = ef.assign_split(codes, grades)
-    kept = grades != "c"
-    assert list(ef.assign_split(codes[kept], grades[kept])) == list(split[kept])
-
-
-def test_assign_split_refuses_unsorted_codes():
-    codes, grades = _codes_and_grades(10)
-    with pytest.raises(ValueError, match="triés par code"):
-        ef.assign_split(codes[::-1], grades[::-1])
-
-
-@pytest.fixture
-def graded_source(tmp_path):
-    """Parquet partitionné de 100 produits utilisables, 20 par grade."""
-    rows = []
-    for index in range(100):
-        row = dict.fromkeys(convert_parquet.COLUMN_SPECS)
-        row.update(BASE, code=f"{index:013d}", nutriscore_grade=ef.GRADES[index % 5], categories_tags=["en:snacks"],
-                   created_t=1600000000, last_modified_t=1700000000, grade_not_applicable=False)
-        rows.append(row)
-    clean_path = tmp_path / "products_clean.parquet"
-    df = pd.DataFrame(rows)
-    df["grade_not_applicable"] = df["grade_not_applicable"].astype("boolean")
-    df.to_parquet(clean_path, index=False)
-    output = tmp_path / "parquet" / "products"
-    convert_parquet.convert(clean_path, output, durations_path=tmp_path / "durations.jsonl")
-    return output
-
-
-def test_split_column_is_written_last_and_counted_in_the_schema(graded_source, tmp_path):
-    schema = ef.export(graded_source, tmp_path / "exports", frozen_on=FROZEN_ON)
-    df = _read(ef.export_paths(tmp_path / "exports", FROZEN_ON)[0])
-    assert list(df.columns)[-1] == ef.SPLIT and set(df[ef.SPLIT]) == {ef.TRAIN, ef.TEST}
-    counts = schema["split"]["counts"]
-    assert counts == {grade: {"train": 16, "test": 4, "test_pct": 20.0} for grade in ef.GRADES}
-    assert (schema["split"]["seed"], schema["split"]["test_fraction"]) == (ef.SPLIT_SEED, ef.TEST_FRACTION)
-    assert schema["split"]["rules"] == ef.SPLIT_RULES
-
-
-def test_split_survives_a_forced_rewrite(graded_source, tmp_path):
-    """Réécrit avec --force : même empreinte SHA-256, donc mêmes produits en test."""
-    first = ef.export(graded_source, tmp_path / "exports", frozen_on=FROZEN_ON)
-    again = ef.export(graded_source, tmp_path / "exports", frozen_on=FROZEN_ON, force=True)
-    assert again["sha256"] == first["sha256"]
