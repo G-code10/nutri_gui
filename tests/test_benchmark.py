@@ -53,8 +53,8 @@ def supports(clean_df, tmp_path_factory):
     folder = tmp_path_factory.mktemp("benchmark")
     clean_path = folder / "products_clean.parquet"
     clean_df.to_parquet(clean_path, index=False)
-    parquet_dir = folder / "produits"
-    convert_parquet.convert(clean_path, parquet_dir, durations_path=folder / "durees.jsonl")
+    parquet_dir = folder / "products"
+    convert_parquet.convert(clean_path, parquet_dir, durations_path=folder / "durations.jsonl")
     return clean_path, parquet_dir
 
 
@@ -123,7 +123,7 @@ def test_summarize_takes_median_time_and_maximum_peak():
 
 # --- Coût de construction (journal des durées) ---
 def test_build_costs_use_the_latest_entry_and_show_missing_steps(tmp_path):
-    log = tmp_path / "durees.jsonl"
+    log = tmp_path / "durations.jsonl"
     utils.append_duration(config.STEP_CONVERT, 9.0, 10, "ancien.parquet", log)
     utils.append_duration(config.STEP_CONVERT, 2.0, 10, "data/clean/products_clean.parquet", log)
     costs = {cost["support"]: cost for cost in bm.build_costs(bm.read_durations(log))}
