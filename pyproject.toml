@@ -1,0 +1,16 @@
+# Fiche idendité du projet
+# permet l'appel de fonction depuis n'importe quel endroit du dossier
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nutriscope"
+version = "0.3.0"
+description = "Nutriscope: application de conseil et renseignement nutritionnel"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.setuptools.packages.find]
+include = ["nutriscope*", "src*"]
