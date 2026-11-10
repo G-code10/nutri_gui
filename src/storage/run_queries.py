@@ -239,19 +239,19 @@ def _column(result: QueryResult, name: str) -> list:
     return [row[index] for row in result.rows]
 
 
-def checks(run: ControlRun) -> list[tuple[str, bool]]:
+def checks(control_run: ControlRun) -> list[tuple[str, bool]]:
     """Vérifications attendues par le TP : (libellé, réussie ?)."""
-    by_aisle = run.results["comptage_par_rayon"]
-    duplicates = run.results["doublons"]
-    anomalies = run.results["bornes_coherences"]
-    grades = set(_column(run.results["distribution_nutriscore"], "grade"))
+    by_aisle = control_run.results["comptage_par_rayon"]
+    duplicates = control_run.results["doublons"]
+    anomalies = control_run.results["bornes_coherences"]
+    grades = set(_column(control_run.results["distribution_nutriscore"], "grade"))
 
     duplicate_codes = dict(zip(_column(duplicates, "controle"), _column(duplicates, "groupes")))["codes en double"]
     bounds = [count for nature, count in zip(_column(anomalies, "nature"), _column(anomalies, "produits"))
               if nature == "borne"]
     aisles = _column(by_aisle, "rayon")
     return [
-        ("la somme du comptage par rayon égale la volumétrie totale", sum(_column(by_aisle, "produits")) == run.total),
+        ("la somme du comptage par rayon égale la volumétrie totale", sum(_column(by_aisle, "produits")) == control_run.total),
         ("une ligne par rayon (aucun rayon en double)", len(aisles) == len(set(aisles))),
         ("0 code en double", duplicate_codes == 0),
         ("0 valeur hors bornes", all(count == 0 for count in bounds)),
