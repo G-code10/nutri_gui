@@ -116,3 +116,37 @@ Passé pour le moment
 - TP 14 : appliquer la politique de manquants écrite dans le schéma de l'export (flag), les colonnes _missing n'étant pas exportées.
 
 # TP13 - Pipeline bout-en-bout
+
+### Décisions
+
+- Point d'entrée : package nutriscope/ avec pipeline.py, lancé par python -m nutriscope.pipeline [load|clean|load_db|parquet|export|all|reset]. CLI seule, sans Makefile : make n'est pas installé par défaut sous Windows ni sous Git Bash, et l'équipe qui teste le dépôt devrait l'installer aussi ; la CLI suffit à l'énoncé.
+- src/pipeline.py (TP 9) renommé src/clean_pipeline.py pour éviter deux pipeline.py ; gardé comme module et importé, pas recopié. Son run() est découpé en clean() et load_database() ; load_database() relit le nettoyé sur disque, donc la base et le Parquet partent du même fichier.
+- Les cinq étapes ont la même signature, (RunContext) -> StepResult : un contexte créé une fois dans main() (périmètre, source, date, options, dossiers), non modifiable.
+- Contrôles : load_db lance les cinq contrôles sur la base seule (run_queries.check_database) ; parquet compare le Parquet à la base (run_queries.check_parquet_against_database) et échoue s'ils diffèrent.
+- Sorties datées <préfixe>_<AAAAMMJJ>, noms en anglais : france_extract, products_nutrition, products_clean, products (dossier partitionné), features_nutriscore. Chaque étape lit son entrée du jour, sinon la plus récente, sinon elle échoue en disant quelle étape lancer ; un dossier partitionné sans _SUCCESS est ignoré.
+- Trois versions gardées par type de sortie (config.KEEP_VERSIONS), supprimées seulement après une écriture réussie ; jamais pour les exports, figés.
+- Étape load : manifeste à côté du brut, avec le SHA-256 de la source (data/food.parquet, 7,7 Go ; calcul compris dans les 18 à 20 s de l'étape) et celui du brut ; l'horodatage est dans le manifeste, jamais dans les données.
+- Source : --source, sinon la variable NUTRISCOPE_SOURCE (terminal ou db.env, chemin relatif depuis la racine du dépôt), sinon data/food.parquet. food.parquet se télécharge à la main.
+- Périmètres : extrait France par défaut (data/), --full (data/full/), --sample (data/sample/) ; load accepte une source déjà aplatie (l'échantillon), recopiée sans extraction, pour que all tourne aussi sur l'échantillon.
+- Journal des durées renommé data/durations.jsonl ; une ligne par étape du pipeline, avec status ok ou failed et le message d'erreur, en plus des sous-étapes (noms en anglais : read, clean_rules, write_clean, report, db_schema, db_load, convert_parquet).
+- Split : colonne split dans l'export, stratifiée sur nutriscore_grade, 20 % de test pour chaque grade, graine 42, un générateur par grade sur les produits triés par code. Méthode, graine, effectifs par grade et règles d'usage dans le schéma.
+- Options : --date AAAAMMJJ pour rejouer une date, --force pour réécrire l'export, --docs pour écrire les rapports dans docs/data/ (par défaut ils vont dans data/reports/, hors Git), reset pour supprimer les sorties datées sans toucher aux exports.
+- pyproject.toml ajouté pour pip install -e . : la commande marche depuis n'importe quel dossier (non demandé par l'énoncé, cité dans son dépannage).
+- docker-compose.yml versionné ; il lit db.env (env_file) pour le mot de passe, rien de secret dans Git.
+
+### Écarts à l'énoncé
+
+- Noms d'étapes en anglais : charger -> load, nettoyer -> clean, charger_base -> load_db, parquet -> parquet, exports -> export.
+- Export nommé features_nutriscore_<AAAAMMJJ> (nom du TP 12) au lieu de features_<AAAAMMJJ>.
+- Pas de data/db/ : la base est un serveur PostgreSQL en conteneur Docker, pas un fichier.
+
+### Résultats
+
+- Extrait France : 1 247 336 lignes brutes, 521 240 nettoyées (base = Parquet), 456 380 dans l'export ; 20,0 % de test pour chaque grade. Pipeline complet en 116 à 118 s, dont 69 à 71 s pour load_db (62 s de chargement des tables) : pas besoin d'orchestrateur.
+- Reproductibilité : l'export du 10/11, produit dans un clone neuf (autre dossier, autre venv, autre conteneur), a le même SHA-256 que celui du 09/11 dans le dépôt de travail (82e5ad23…).
+- Test du README dans un clone neuf : fait. Manques corrigés : création de data/, conflit de port et de nom de conteneur si un PostgreSQL tourne déjà, tests sautés sans échantillon.
+
+### À reprendre
+
+- docs/architecture.md : mettre à jour les anciennes commandes (python -m src.…) et les anciens noms non datés, et passer le schéma du flux en liste de flèches comme dans docs/data/pipeline.md (en plus de la reprise prévue après les TP 10, 13 et 14).
+- Script de téléchargement automatique de food.parquet, appelé à part, hors pipeline.
