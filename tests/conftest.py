@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 from dotenv import load_dotenv
-from psycopg.conninfo import conninfo_to_dict
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -15,27 +15,50 @@ if str(ROOT) not in sys.path:
 from src import config, create_db, load_db  # après l'ajout de la racine au chemin des imports
 
 # Chargé dès l'import de ce fichier, donc avant la collecte des tests (qui lisent TEST_DATABASE_URL à l'import).
-# TEST_DATABASE_URL peut être définie dans db.env ; un export fait dans le terminal l'emporte.
+# Un export fait dans le terminal l'emporte sur db.env.
 load_dotenv(load_db.ENV_PATH)
+
+TEST_URL_ENV = "TEST_DATABASE_URL"   # connexion complète à la base de test, lue par les fichiers de test
+TEST_DB_ENV = "TEST_POSTGRES_DB"     # ou seulement le nom de la base de test : le reste vient de db.env
+
+
+def _test_database_url() -> str | None:
+    """Connexion à la base de test : TEST_DATABASE_URL si elle est définie, sinon celle de db.env avec TEST_POSTGRES_DB pour nom.
+
+    Ainsi le mot de passe n'est écrit qu'une fois, dans POSTGRES_PASSWORD. TEST_DATABASE_URL définie mais vide
+    (« TEST_DATABASE_URL= python -m pytest ») désactive les tests avec base. Rien de défini : None.
+    """
+    if TEST_URL_ENV in os.environ:
+        return os.environ[TEST_URL_ENV]
+    name = os.environ.get(TEST_DB_ENV)
+    if not name:
+        return None
+    return make_conninfo(**{**load_db.connection_params(), "dbname": name})
+
+
+# Les fichiers de test lisent TEST_DATABASE_URL à leur import, qui vient après celui de ce fichier
+_url = _test_database_url()
+if _url:
+    os.environ[TEST_URL_ENV] = _url
 
 
 @pytest.fixture(scope="session", autouse=True)
 def test_database():
-    """Une fois par session : crée la base de TEST_DATABASE_URL si elle n'existe pas encore.
+    """Une fois par session : crée la base de test (TEST_DATABASE_URL, ou TEST_POSTGRES_DB) si elle n'existe pas encore.
 
-    TEST_DATABASE_URL vient de db.env (ou du terminal). Sans elle, ne fait rien (les tests avec base sont ignorés). Garde-fou : si l'URL vise la vraie
+    Sans l'une ni l'autre, ne fait rien (les tests avec base sont ignorés). Garde-fou : si la connexion vise la vraie
     base (celle de db.env), la session s'arrête avant que le moindre test ne vide ses tables.
     """
-    url = os.environ.get("TEST_DATABASE_URL")
+    url = os.environ.get(TEST_URL_ENV)
     if not url:
         return
     params = conninfo_to_dict(url)
     name = params.pop("dbname", None)
     if not name:
-        pytest.exit("TEST_DATABASE_URL doit nommer une base (…/nutriscope_test).", returncode=2)
+        pytest.exit("La connexion de test doit nommer une base (TEST_POSTGRES_DB=nutriscope_test).", returncode=2)
     if name == load_db.settings()["database"]:
         pytest.exit(
-            f"TEST_DATABASE_URL vise la vraie base « {name} » : les tests la videraient. Choisis une autre base.",
+            f"La base de test vise la vraie base « {name} » : les tests la videraient. Choisis un autre TEST_POSTGRES_DB.",
             returncode=2,
         )
     create_db.create_database_if_missing({**params, "database": name})
