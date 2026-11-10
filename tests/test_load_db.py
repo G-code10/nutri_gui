@@ -2,7 +2,7 @@
 
 ATTENTION : load() supprime et recrée les tables. Les tests avec base lisent donc TEST_DATABASE_URL,
 jamais DATABASE_URL : ils ne touchent pas à ta vraie base. Sans TEST_DATABASE_URL, ils sont ignorés.
-Exemple : export TEST_DATABASE_URL=postgresql://utilisateur:motdepasse@localhost:5432/nutriscope_test
+Elle est construite par conftest.py depuis db.env : TEST_POSTGRES_DB=nutriscope_test (même serveur et même mot de passe).
 """
 
 import os
