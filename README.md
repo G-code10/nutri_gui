@@ -34,11 +34,11 @@ python -m scripts.make_sample_raw      # lit data/food.parquet écrit data/raw/s
 
 #### 3- Lancement de la base de données
 
-copier db.env.example en db.env, y choisir, le nom, un mot de passe, puis lancer 
+copier db.env.example en db.env, y choisir, le nom, un mot de passe, éventuellement le port puis lancer 
 
 ```bash
 cp db.env.example db.env
-docker compose up -d
+docker compose --env-file db.env up -d
 ```
 
 #### 4- Lancement de la pipeline
