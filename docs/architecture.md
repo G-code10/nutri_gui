@@ -8,30 +8,20 @@ Les mentions « À faire » signalent ce qui n'existe pas encore dans le dépôt
 ## 1. Schéma du flux
 
 ```
-data/food.parquet                          source Open Food Facts (champs imbriqués)
-      │
-      │  python -m src.extract [--country en:france]
-      ▼
-data/raw/*.parquet                         brut aplati : fichier complet, extrait France, échantillon de test
-      │
-      │  python -m src.clean_pipeline          (règles de nettoyage du TP 9, src/cleaning.py)
-      ▼
-data/clean/products_clean.parquet          nettoyé : SOURCE DE VÉRITÉ UNIQUE
-      │                         │
-      │ (même exécution         │  python -m src.storage.convert_parquet
-      │  du pipeline)           ▼
-      ▼                    data/parquet/produits/aisle=<rayon>/     Parquet partitionné par rayon
-base PostgreSQL                 │
-(products, nutrients,           ├──► contrôles   python -m src.storage.run_queries  (aussi sur la base)
- brands, categories…)           ├──► benchmark   python -m src.storage.benchmark    (aussi sur la base)
-      │                         ├──► EDA         notebooks (À faire, TP 10)
-      ▼                         │
-API de l'application            │  python -m src.storage.export_features
-(À faire)                       ▼
-                           data/exports/features_nutriscore_<AAAAMMJJ>.parquet  (+ .schema.json)
-                                │
-                                ▼
-                           entraînement (À faire, TP 14)
+data/food.parquet  --load-->  data/raw/france_extract_<AAAAMMJJ>.parquet + manifeste
+    source Open Food Facts, imbriquée, téléchargée à la main
+
+data/raw/france_extract_<AAAAMMJJ>.parquet  --clean-->  data/clean/products_clean_<AAAAMMJJ>.parquet
+    nettoyé : SOURCE DE VÉRITÉ UNIQUE (règles du TP 9, src/cleaning.py)
+
+data/clean/products_clean_<AAAAMMJJ>.parquet  --load_db-->  base PostgreSQL
+    lue par : contrôles ; plus tard, l'API de l'application
+
+data/clean/products_clean_<AAAAMMJJ>.parquet  --parquet-->  data/parquet/products_<AAAAMMJJ>/aisle=<rayon>/
+    lu par : export, contrôles (comparés à la base), benchmark ; plus tard, l'EDA (TP 10)
+
+data/parquet/products_<AAAAMMJJ>/  --export-->  data/exports/features_nutriscore_<AAAAMMJJ>.parquet (colonne split)
+    lu par : entraînement (TP 14 à 16)
 ```
 
 Chaque étape écrit sa durée dans `data/durees.jsonl` (journal des durées, relu par le benchmark).

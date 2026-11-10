@@ -10,12 +10,14 @@
 
 #### 1- Installation
 ```bash
+py -3.12 -m venv .venv
+source .venv/Scripts/activate
 pip install -r requirements
 pip install -e .
 ```
 
 #### 2- Téléchargement fichier parquet
-
+TODO
 Pour l'instant il n'existe pas de script de téléchargement automatique du fichier .parquet, celui ci est a téléchargé depuis https://huggingface.co/datasets/openfoodfacts/product-database/blob/main/food.parquet et a mettre dans le dossier data
 
 Script de création de sample pour essais rapide et test sur donné réels
@@ -25,16 +27,11 @@ python -m scripts.make_sample_raw      # lit data/food.parquet écrit data/raw/s
 
 #### 3- Lancement de la base de données
 
-A compléter
-
-```bash
-docker run --name nutriscope-db -e POSTGRES_PASSWORD=change-me -p 5432:5432 -d postgres:17
-```
-
-copier le db example et compléter les changeme
+copier db.env.example en db.env, y choisir un mot de passe, puis lancer 
 
 ```bash
 cp db.env.example db.env
+docker compose up -d
 ```
 
 #### 4- Lancement de la pipeline

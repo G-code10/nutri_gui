@@ -1,8 +1,8 @@
 # Pipeline NutriScope (TP 13)
 
 > Données : © Open Food Facts contributors — ODbL.
-> Architecture des données (magasins, règles, phase 6-7) : [`../architecture.md`](../architecture.md).
-> Durées mesurées le 09/11/2026, lus dans `data/durations.jsonl`
+> Architecture des données (magasins, règles, phase 6-7) : docs/architecture.md
+> Durées mesurées le 09/11/2026, lus dans data/durations.jsonl
 
 ## 1. Schéma du flux
 
@@ -23,13 +23,13 @@ data/parquet/products_<AAAAMMJJ>/  --export-->  data/exports/features_nutriscore
     lu par : entraînement et évaluation (TP 14 à 16)
 ```
 
-La base sert l'application : accès par code, filtres indexés. Le Parquet sert l'analyse et le ML : balayages et agrégats. Les deux partent du même nettoyé : l'étape `parquet` échoue si leurs contrôles diffèrent.
+La base sert l'application : accès par code, filtres indexés. Le Parquet sert l'analyse et le ML : balayages et agrégats. Les deux partent du même nettoyé : l'étape parquet échoue si leurs contrôles diffèrent.
 
 Toutes les sorties sont datées. Chaque étape lit son entrée du jour, sinon la plus récente, sinon elle échoue en disant quelle étape lancer. Seules les 3 dernières versions de chaque sortie sont gardées, sauf les exports, jamais supprimés.
 
 ## 2. Commandes
 
-Depuis n'importe quel dossier, après `pip install -e .` :
+Depuis n'importe quel dossier, après pip install -e :
 
 | Besoin | Commande |
 |---|---|
@@ -65,7 +65,7 @@ Machine : (Windows 11, Intel 16 cœurs logiques, 32 Go de RAM. Python 3.12.10, p
 | export | 1 482 | 0,11 | 456 380 | 1,5 |
 | Total | | 1,4 | | 118,4 |
 
-Extrait France : lancement `all --docs --force` du 09/11 à 15:11. Sur les deux autres lancements du même jour, chaque étape varie de moins de 2,5 s. Échantillon : lancement `all --sample` du 09/11 à 12:06, total égal à la somme des étapes.
+Périmètre france
 
 Détail des deux étapes les plus longues (extrait France, même lancement) :
 
@@ -80,17 +80,17 @@ Détail des deux étapes les plus longues (extrait France, même lancement) :
 
 ## Lecture
 
-1. Le chargement de la base domine : 69 s sur 118, dont 62 s pour remplir les tables. C'est le prix du schéma normalisé, le serveur tournant dans un conteneur Docker ce qui peux pénaliser ces temps. 
+1. Le chargement de la base domine : 69s sur 118, dont 62s pour remplir les tables. C'est le prix du schéma normalisé, le serveur tournant dans un conteneur Docker ce qui peux pénaliser ces temps. 
 Les supports analytiques, eux, sont rapides : 10 s pour le Parquet, 1,5 s pour l'export.
-2. Le nettoyage (17 s) se partage presque à égalité entre les règles et le rapport, qui recompte les anomalies avant et après. `load` (20 s) comprend l'extraction et le calcul de l'empreinte SHA-256 de la source de 7,7 Go.
-3. Le pipeline complet tient en deux minutes sur l'extrait france : un orchestrateur (Airflow) ne se justifie pas. La CLI suffit, et le journal des durées dira si cela change, par exemple avec le fichier complet (`--full`).
+2. Le nettoyage (17 s) se partage presque à égalité entre les règles et le rapport, qui recompte les anomalies avant et après, load (20 s) comprend l'extraction et le calcul de l'empreinte SHA-256 de la source de 7,7 Go.
+3. Le pipeline complet tient en deux minutes sur l'extrait france : un orchestrateur (Airflow) ne se justifie pas. La CLI suffit, et le journal des durées dira si cela change, par exemple avec le fichier complet (--full).
 
 ## Ce que la phase 4 lira
 
-- Fichier : `data/exports/features_nutriscore_<AAAAMMJJ>.parquet` (celui du 09/11 : 456 380 produits, SHA-256 `82e5ad23a8e35ff470a3288982dc76f49527098d0a9ba004b6392a16a60bca5e`).
+- Fichier : `data/exports/features_nutriscore_<AAAAMMJJ>.parquet` (exemple: celui du 09/11 : 456 380 produits, SHA-256 `82e5ad23a8e35ff470a3288982dc76f49527098d0a9ba004b6392a16a60bca5e`).
 - Schéma : `features_nutriscore_<AAAAMMJJ>.schema.json`, à côté. Il contient les filtres, les colonnes (type, unité, rôle, % de manquants, politique de manquants), le split, le SHA-256, le commit Git et la licence.
 - Cible : `nutriscore_grade` (a à e). Identifiant : `code`.
-- Split : colonne `split` (`train` ou `test`), stratifiée sur le grade, 20 % de test pour chaque grade, graine 42.
+- Split : colonne `split` (train ou test), stratifiée sur le grade, 20 % de test pour chaque grade, graine 42.
 
 | Grade | Train | Test |
 |---|---|---|
@@ -101,7 +101,7 @@ Les supports analytiques, eux, sont rapides : 10 s pour le Parquet, 1,5 s pour l
 | e | 105 226 | 26 306 |
 
 Interdits :
-- recalculer le split : utiliser la colonne `split` telle quelle ;
+- recalculer le split : utiliser la colonne split telle quelle ;
 - utiliser `nutriscore_score` comme feature : le grade en est déduit ;
-- utiliser `code`, `product_name` ou `brands` comme features (les deux derniers sont absents de l'export).
+- utiliser `code`, `product_name` ou `brands` comme features.
 
