@@ -97,10 +97,11 @@ Passé pour le moment
 - Mémoire mesurée par psutil sous Windows (resource n'y existe pas) et par VmHWM sous Linux : ru_maxrss reprenait le pic du processus parent (161 Mo pour tous les moteurs).
 - Deux documents de benchmark : docs/data/benchmark_mesures.md, généré par le script (à ne pas modifier à la main), et docs/data/benchmark.md, rédigé (lecture, limites, conséquences).
 - Journal des durées (data/durees.jsonl) ajouté en anticipation du TP 13 : aucune mesure codée en dur ni saisie à la main, la base n'étant construite que par le pipeline, et le TP 13 le demandera. Contrainte : seules les étapes réussies sont inscrites pour l'instant ; les échecs viendront avec l'orchestration (TP 13).
-- Export features : tolérance de 0,5 conservée dans les filtres (sucres ≤ glucides + 0,5, saturés ≤ lipides + 0,5), comme au nettoyage, au lieu de l'inégalité stricte de l'énoncé.
-- Export features : ratios bornés à [0, 1] (plafond à 1, nombre de produits plafonnés écrit dans le schéma), 0 si numérateur et dénominateur valent 0, NULL si seul le dénominateur vaut 0. Règles propres à l'export, le nettoyage n'est pas modifié. Raison : sur l'extrait France, des dénominateurs minuscules donnaient des ratios jusqu'à 1 million.
-- Export features : schéma nommé features_nutriscore_<AAAAMMJJ>.schema.json (au lieu de schema.json) pour que plusieurs exports datés coexistent dans data/exports/.
-- Export features : politique de manquants « flag », lue dans cleaning.DEFAULT_MISSING_STRATEGY (flag par défaut pour additives_n et les ratios). Les colonnes _missing ne sont pas exportées : la politique est écrite dans le schéma et sera appliquée au TP 14.
+- Export features : 
+    tolérance de 0,5 conservée dans les filtres (sucres ≤ glucides + 0,5, saturés ≤ lipides + 0,5), comme au nettoyage, au lieu de l'inégalité stricte de l'énoncé.
+    ratios bornés à [0, 1] (plafond à 1, nombre de produits plafonnés écrit dans le schéma), 0 si numérateur et dénominateur valent 0, NULL si seul le dénominateur vaut 0. Règles propres à l'export, le nettoyage n'est pas modifié. Raison : sur l'extrait France, des dénominateurs minuscules donnaient des ratios jusqu'à 1 million.
+    schéma nommé features_nutriscore_<AAAAMMJJ>.schema.json (au lieu de schema.json) pour que plusieurs exports datés coexistent dans data/exports/.
+    politique de manquants « flag », lue dans cleaning.DEFAULT_MISSING_STRATEGY (flag par défaut pour additives_n et les ratios). Les colonnes _missing ne sont pas exportées : la politique est écrite dans le schéma et sera appliquée au TP 14.
 - Les sept nutriments clés sont centralisés dans config.CORE_NUTRIENTS (benchmark et export).
 - Les schémas JSON (schema_produits.json, schéma de l'export) ne sont pas committés : ils restent à côté de leurs données dans data/, ignoré par Git.
 
