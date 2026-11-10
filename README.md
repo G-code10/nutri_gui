@@ -51,7 +51,7 @@ Résultat attendu :
 La commande se termine sans ligne ÉCHEC et renvoie le code 0 (echo $? affiche 0).
 L'étape parquet affiche le même nombre de produits pour la base et pour le Parquet.
 data/exports/ contient features_nutriscore_<AAAAMMJJ>.parquet et son .schema.json ; l'étape export affiche environ 20 % de test pour chaque grade et l'empreinte SHA-256.
-Chaque étape a une ligne "status": "ok" dans data/durations.jsonl.
+Chaque étape a une ligne "status": "ok" dans data/durations.jsonl
 le programme indique que la base postest existe déja car celle ci est initialisé par le docker compose
 
 #### 5- Lancer les tests
