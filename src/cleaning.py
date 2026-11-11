@@ -1,8 +1,5 @@
-"""Nettoyage de products_nutrition : une règle = une fonction pure, appelées dans l'ordre numéroté.
-
+"""nettoyage de products_nutrition : une règle = une fonction pure, appelées dans l'ordre numéroté
 Contrat commun : def rule(df) -> tuple[pd.DataFrame, RuleReport]
-
-Aucune imputation statistique ici (médiane, KNN, mode) : elle appartient au pipeline ML, après le split.
 """
 
 import re
@@ -42,7 +39,7 @@ NUTRIENT_COLUMNS = [
 STRING_COLUMNS = ["code", "product_name", "brands", "ingredients_text", "allergens", "serving_size"]
 
 # Tous les textes envoyés à la base (on y cherche les octets nuls, que PostgreSQL refuse)
-ALL_TEXT_COLUMNS = STRING_COLUMNS + ["main_category", "food_groups_tag_1", "nutriscore_grade"]
+ALL_TEXT_COLUMNS = STRING_COLUMNS + ["main_category", "food_groups_tag_1", "food_groups_tag_2", "nutriscore_grade"]
 NUL = "\x00"
 
 # Textes dont une chaîne vide veut dire « manquant » (pas allergens : '' y a un sens)
@@ -89,6 +86,7 @@ DEFAULT_MISSING_STRATEGY = {
     "nutriscore_score": "keep",
     "nutriscore_grade": "keep",
     "food_groups_tag_1": "keep",
+    "food_groups_tag_2": "keep",
     "categories_tags": "keep",
 }
 
