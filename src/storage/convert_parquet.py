@@ -55,6 +55,7 @@ COLUMN_SPECS = {
     "categories_tags": ("CAST(categories_tags AS VARCHAR[])", "VARCHAR[]", "liste de tags conservée telle quelle pour l'analyse"),
     "main_category": ("CAST(main_category AS VARCHAR)", "VARCHAR", "tag de catégorie"),
     "food_groups_tag_1": ("CAST(food_groups_tag_1 AS VARCHAR)", "VARCHAR", "tag d'origine du rayon, gardé à côté de son slug"),
+    "food_groups_tag_2": ("CAST(food_groups_tag_1 AS VARCHAR)", "VARCHAR", " 2eme tag d'origine du rayon"),
     "allergens": ("CAST(allergens AS VARCHAR)", "VARCHAR", "NULL = inconnu, '' = aucun allergène déclaré"),
     "ingredients_text": ("CAST(ingredients_text AS VARCHAR)", "VARCHAR", _TEXT_REASON),
     "additives_n": ("CAST(additives_n AS SMALLINT)", "SMALLINT", "nombre d'additifs : entier petit, 2 octets suffisent"),

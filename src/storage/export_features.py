@@ -71,6 +71,7 @@ _G = "g/100 g"
 COLUMNS = {
     "code": ("VARCHAR", None, "code-barres (texte, zéros de tête conservés)", "identifiant"),
     "aisle": ("VARCHAR", None, "rayon : slug de food_groups_tag_1, unknown si absent", "feature"),
+    "aisle2": ("VARCHAR", None, "rayon : slug de food_groups_tag_2, unknown si absent", "feature"),
     "energy_kcal_100g": ("DOUBLE", "kcal/100 g", "énergie", "feature"),
     "fat_100g": ("DOUBLE", _G, "lipides", "feature"),
     "saturated_fat_100g": ("DOUBLE", _G, "acides gras saturés", "feature"),
