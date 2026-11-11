@@ -23,6 +23,7 @@ def raw_product(code, **changes):
     row = {
         "code": code, "product_name": "Produit " + code, "brands": "Marque", "categories_tags": ["en:snacks"],
         "main_category": "en:snacks", "food_groups_tag_1": "en:sugary-snacks", "allergens": "",
+        "food_groups_tag_2": "en:biscuits-and-cakes", "allergens": "",
         "ingredients_text": "sucre", "additives_n": 1, "nova_group": 4, "nutriscore_score": 12,
         "nutriscore_grade": "d", "serving_size": "30 g", "completeness": 0.5,
         "created_t": 1600000000, "last_modified_t": 1700000000,
@@ -42,7 +43,7 @@ def clean_df():
         raw_product("2000002", product_name="Biscuit", nutriscore_grade="e"),
         raw_product("3000003", food_groups_tag_1="en:beverages", nutriscore_grade="a",
                     carbohydrates_100g=10.0, sugars_100g=10.3),
-        raw_product("4000004", food_groups_tag_1=None, nutriscore_grade="not-applicable"),
+        raw_product("4000004", food_groups_tag_1=None, food_groups_tag_2=None, nutriscore_grade="not-applicable"),
         raw_product("5000005", food_groups_tag_1="en:beverages", nutriscore_grade="unknown"),
         raw_product("6000006", nutriscore_grade="b"),
     ])

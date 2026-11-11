@@ -29,6 +29,7 @@ def raw_product(index: int) -> dict:
     return {
         "code": f"{index:013d}", "product_name": f"Produit {index}", "brands": f"Marque {brand}",
         "categories_tags": ["en:snacks"], "main_category": "en:snacks", "food_groups_tag_1": aisle,
+        "food_groups_tag_2": ["en:sweetened-beverages", "en:biscuits-and-cakes", None][index % 3],
         "allergens": "", "ingredients_text": "sucre", "additives_n": 1, "nova_group": 4, "nutriscore_score": 5,
         "nutriscore_grade": "abcde"[index % 5] if index % 4 else "unknown", "serving_size": "30 g",
         "completeness": 0.5, "created_t": 1600000000, "last_modified_t": 1700000000,

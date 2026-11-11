@@ -31,7 +31,7 @@ def raw_product(code, **changes):
 
 # Colonnes du brut produit par extract.py qui ne servent pas au nettoyage, mais que la conversion Parquet exige
 EXTRACT_ONLY_COLUMNS = {
-    "main_category": "en:biscuits", "additives_n": 2,
+    "main_category": "en:biscuits", "additives_n": 2, "food_groups_tag_2": "en:biscuits-and-cakes",
     "created_t": 1600000000, "last_modified_t": 1700000000,
 }
 

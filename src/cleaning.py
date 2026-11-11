@@ -86,7 +86,6 @@ DEFAULT_MISSING_STRATEGY = {
     "nutriscore_score": "keep",
     "nutriscore_grade": "keep",
     "food_groups_tag_1": "keep",
-    "food_groups_tag_2": "keep",
     "categories_tags": "keep",
 }
 

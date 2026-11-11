@@ -91,6 +91,8 @@ def test_nested_fields_flattened(off_parquet, tmp_path):
     assert biscuit["product_name"] == "Biscuit"
     assert biscuit["ingredients_text"] == "farine, sucre"
     assert biscuit["food_groups_tag_1"] == "en:sugary-snacks"
+    assert biscuit["food_groups_tag_2"] == "en:biscuits-and-cakes"
+    assert pd.isna(df.loc["5400000000001", "food_groups_tag_2"])
     assert biscuit["allergens"] == "en:gluten,en:milk"
     assert pd.isna(df.loc["5400000000001", "brands"])
 
