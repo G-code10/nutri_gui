@@ -1,9 +1,9 @@
 """Extraction de la table brute products_nutrition depuis le Parquet Open Food Facts (aucun nettoyage).
 
-Une seule requête d'extraction pour tout le dépôt : make_sample_raw.py, le pipeline et le TP 12 la partagent.
-Elle déplie les champs imbriqués (product_name, nutriments...) en colonnes plates, celles que lit cleaning.clean().
+requete d'extraction du parquet, utilisé par le script make_sample_raw et le pipeline.
+elle déplie les champs imbriqués (product_name, nutriments etc.) du parquet en colonnes plates, celles que lit cleaning.clean().
 
-Deux formes de source sont acceptées (étape load du pipeline, TP 13) :
+2 formes de source sont acceptées (étape load du pipeline, TP 13) :
 - imbriquée (data/food.parquet) : extraction par la requête ci-dessous, avec filtre pays éventuel ;
 - déjà aplatie (l'échantillon data/raw/sample_raw.parquet) : recopiée telle quelle, colonnes dans l'ordre de
   COLUMNS ; le filtre pays y est impossible (countries_tags n'est pas extrait) et refusé.
@@ -44,7 +44,7 @@ NESTED_MARKER = "nutriments"   # colonne propre à la source imbriquée
 NESTED = "imbriquée"
 FLAT = "aplatie"
 
-# Liste du SELECT : requête de la cartographie (3.2.2), complétée de additives_n et created_t (TP 12)
+# Liste du SELECT : requête de la carto 3.2.2, complétée de additives_n et created_t (TP 12)
 SELECT_SQL = """
     SELECT
         t.code,
@@ -53,6 +53,7 @@ SELECT_SQL = """
         t.categories_tags,
         t.compared_to_category AS main_category,
         t.food_groups_tags[1] AS food_groups_tag_1,
+        t.food_groups_tags[2] AS food_groups_tag_2,
         array_to_string(t.allergens_tags, ',') AS allergens,
         t.ingredients_text[1].text AS ingredients_text,
         t.additives_n,
@@ -84,7 +85,7 @@ SELECT_SQL = """
 # Colonnes produites, dans l'ordre du SELECT (référence pour les tests et les scripts en aval)
 COLUMNS = [
     "code", "product_name", "brands", "categories_tags", "main_category", "food_groups_tag_1",
-    "allergens", "ingredients_text", "additives_n", "nova_group", "nutriscore_score",
+    "food_groups_tag_2", "allergens", "ingredients_text", "additives_n", "nova_group", "nutriscore_score",
     "nutriscore_grade", "serving_size", "completeness", "created_t", "last_modified_t",
     "energy_kcal_100g", "energy_kj_100g", "fat_100g", "saturated_fat_100g", "carbohydrates_100g",
     "sugars_100g", "fiber_100g", "proteins_100g", "salt_100g", "sodium_100g",
