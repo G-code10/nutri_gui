@@ -63,7 +63,7 @@ CREATE TABLE products (
     product_name         TEXT,
     brand_id             BIGINT,
     aisle_code           TEXT NOT NULL DEFAULT 'unknown',
-    aisle_code2          TEXT NOT NULL DEFAULT 'unknown',
+    food_groups_tag_2    TEXT,
     main_category        TEXT,
     ingredients_text     TEXT,
     allergens            TEXT,          -- NULL = inconnu, '' = aucun allergène déclaré

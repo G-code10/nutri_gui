@@ -42,7 +42,7 @@ ENV_VARIABLES = {
 TABLES = ["aisles", "brands", "categories", "products", "nutrients", "product_categories"]
 
 PRODUCT_COLUMNS = [
-    "code", "product_name", "brand_id", "aisle_code", "aisle_code2", "main_category", "ingredients_text", "allergens",
+    "code", "product_name", "brand_id", "aisle_code", "food_groups_tag_2", "main_category", "ingredients_text", "allergens",
     "serving_size", "nova_group", "nutriscore_score", "nutriscore_grade", "grade_not_applicable",
     "completeness", "last_modified_t",
 ]

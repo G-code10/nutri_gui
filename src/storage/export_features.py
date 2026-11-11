@@ -35,6 +35,7 @@ import pyarrow as pa
 from src import cleaning, config
 from src.storage.convert_parquet import PARTITION_KEY, SUCCESS_MARKER
 from src.utils import (
+    aisle_slug_sql,
     display_path,
     duckdb_parquet_options,
     file_sha256,
@@ -71,7 +72,7 @@ _G = "g/100 g"
 COLUMNS = {
     "code": ("VARCHAR", None, "code-barres (texte, zéros de tête conservés)", "identifiant"),
     "aisle": ("VARCHAR", None, "rayon : slug de food_groups_tag_1, unknown si absent", "feature"),
-    "aisle2": ("VARCHAR", None, "rayon : slug de food_groups_tag_2, unknown si absent", "feature"),
+    "aisle2": ("VARCHAR", None, "sous-groupe : slug de food_groups_tag_2, unknown si absent", "feature"),
     "energy_kcal_100g": ("DOUBLE", "kcal/100 g", "énergie", "feature"),
     "fat_100g": ("DOUBLE", _G, "lipides", "feature"),
     "saturated_fat_100g": ("DOUBLE", _G, "acides gras saturés", "feature"),
@@ -90,7 +91,7 @@ COLUMNS = {
 }
 
 # Colonnes jamais manquantes : filtrées (nutriments clés, cible), toujours renseignées (code, rayon) ou calculées (split)
-NEVER_MISSING = {IDENTIFIER, PARTITION_KEY, TARGET, SPLIT, *config.CORE_NUTRIENTS}
+NEVER_MISSING = {IDENTIFIER, PARTITION_KEY, "aisle2", TARGET, SPLIT, *config.CORE_NUTRIENTS}
 NEVER_MISSING_POLICY = "aucune : jamais manquante dans l'export"
 DEFAULT_POLICY = "flag"   # colonnes absentes de cleaning.DEFAULT_MISSING_STRATEGY (additives_n, ratios)
 
@@ -161,6 +162,8 @@ def _select_list() -> str:
         if name in RATIOS:
             numerator, denominator, _ = RATIOS[name]
             expression = _ratio_sql(numerator, denominator)
+        elif name == "aisle2":
+            expression = aisle_slug_sql("food_groups_tag_2")
         else:
             expression = name
         expressions.append(f"CAST({expression} AS {sql_type}) AS {name}")
