@@ -24,7 +24,7 @@ DROP TABLE IF EXISTS brands CASCADE;
 DROP TABLE IF EXISTS aisles CASCADE;
 
 -- ============================================================================
--- Table: aisles (rayons, issus de food_groups_tag_1)
+-- Table: aisles (rayons, issus de food_groups_tag_1 et food_groups_tag_2)
 -- ============================================================================
 CREATE TABLE aisles (
     aisle_code  TEXT PRIMARY KEY,
@@ -63,6 +63,7 @@ CREATE TABLE products (
     product_name         TEXT,
     brand_id             BIGINT,
     aisle_code           TEXT NOT NULL DEFAULT 'unknown',
+    aisle_code2          TEXT NOT NULL DEFAULT 'unknown',
     main_category        TEXT,
     ingredients_text     TEXT,
     allergens            TEXT,          -- NULL = inconnu, '' = aucun allergène déclaré
