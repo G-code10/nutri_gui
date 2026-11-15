@@ -151,3 +151,33 @@ Passé pour le moment
 
 - docs/architecture.md : mettre à jour les anciennes commandes (python -m src.…) et les anciens noms non datés, et passer le schéma du flux en liste de flèches comme dans docs/data/pipeline.md (en plus de la reprise prévue après les TP 10, 13 et 14).
 - Script de téléchargement automatique de food.parquet, appelé à part, hors pipeline.
+
+# TP 14 — Prédire le Nutri-Score (classification a→e)
+
+### Synthèse :
+
+la forêt aléatoire `class_weight="balanced"` prédit le grade avec un F1 macro de 0,920 sur le test
+(0,898 sur les produits sans jumeau dans le train), contre 0,77 pour la régression logistique et 0,09 pour la classe
+majoritaire ; ses erreurs ne portent que sur des grades voisins, et les plus confiantes relèvent des données
+(fiches fausses, catégorie absente, algorithme des boissons), pas du modèle.
+
+### Données :
+
+export `features_nutriscore_<AAAAMMJJ>` (split figé, CV 5 plis stratifiée dans le train, test regardé une fois).
+Features : 7 nutriments, fibres, fruits-légumes, NOVA (nombre), additifs, `aisle`, `aisle2` + 3 ratios et l'écart
+d'énergie relatif (plafonné à ±1) calculés dans le pipeline ; imputation médiane + indicateur, standardisation, one-hot.
+
+
+### Constats :
+- Piège de l'accuracy : classe majoritaire à 0,29 d'accuracy pour 0,09 de F1 macro (rapport 3,2).
+- Jumeaux : ~20 % des produits de validation ont un jumeau exact (13 features identiques) dans l'entraînement ;
+  ils gonflent le F1 de la forêt d'environ 0,02. Mesure « sans jumeau » ajoutée partout.
+- Fuite : `nutriscore_score` donne 0,994 et 88 % de l'importance ; retirée, garde-fou testé ;
+  contrôle négatif (`completeness`) sans signal.
+- Importances cohérentes avec le barème (sel, sucres, saturés en tête) ; lipides, glucides et rayons = proxies.
+- Déséquilibre (e/b ≈ 2,8) : `balanced` retenu ; SMOTE n'apporte pas plus, mal placé il gonfle le F1 de +0,035.
+
+### Actions pour le TP 9 :
+
+Estimer les fruits-légumes par la catégorie ; marquer comme suspect le grade d'une fiche
+dont l'énergie a été corrigée. **Limite** : produits notés avec l'algorithme des boissons (poudres, édulcorants).
