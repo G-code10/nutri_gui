@@ -12,8 +12,6 @@ Ce qui n'est PAS ici :
 - les constantes métier du nettoyage (KCAL_MAX, RANGES, tolérances...) : paramètres des règles, dans cleaning.py ;
 - la connexion à la base (CONF, db.env) : dans load_db.py ;
 - ce qui ne sert qu'à un seul module.
-
-Aucun fichier n'est lu ni créé à l'import : ce ne sont que des chemins et des valeurs.
 """
 
 from pathlib import Path

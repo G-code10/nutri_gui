@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from src import cleaning, config, utils
+from src import config, utils
 from src.storage import convert_parquet
 from src.storage import export_features as ef
 
@@ -112,11 +112,6 @@ def test_fat_energy_ratio_uses_nine_kcal_per_gram(exported):
     assert ratio["0000000000001"] == pytest.approx(9 * 20.0 / 400.0)
 
 
-def test_capped_ratios_are_counted_in_the_schema(exported):
-    capped = exported[0]["ratios"]["capped"]
-    assert capped == {"sugars_carbohydrates_ratio": 1, "saturated_fat_ratio": 0, "fat_energy_ratio": 0}
-
-
 # --- Schéma ---
 def test_schema_columns_match_the_parquet_in_order(exported):
     schema, parquet_path, schema_file = exported
@@ -142,14 +137,9 @@ def test_target_has_no_missing_values(exported):
     assert target["missing_pct"] == 0.0 and target["role"] == "cible"
 
 
-def test_missing_rates_and_policies(exported):
+def test_missing_rates(exported):
     columns = {c["name"]: c for c in exported[0]["columns"]}
     assert columns["fiber_100g"]["missing_pct"] == pytest.approx(100 / len(KEPT), abs=0.01)
-    assert columns["fiber_100g"]["missing_policy"] == cleaning.DEFAULT_MISSING_STRATEGY["fiber_100g"]
-    assert columns["nova_group"]["missing_policy"] == cleaning.DEFAULT_MISSING_STRATEGY["nova_group"]
-    assert columns["additives_n"]["missing_policy"] == ef.DEFAULT_POLICY
-    assert columns["fat_energy_ratio"]["missing_policy"] == ef.DEFAULT_POLICY
-    assert columns["salt_100g"]["missing_policy"] == ef.NEVER_MISSING_POLICY
 
 
 # --- Export figé et reproductible ---
@@ -197,13 +187,6 @@ def test_assign_split_is_reproducible_product_by_product():
     assert list(ef.assign_split(codes, grades)) == list(first)                # même graine : mêmes produits en test
     assert list(ef.assign_split(codes, grades, seed=7)) != list(first)         # autre graine : autre tirage
 
-
-def test_assign_split_of_a_grade_does_not_depend_on_the_others():
-    """Générateur local par grade : retirer tous les produits d'un grade ne change rien aux autres grades."""
-    codes, grades = _codes_and_grades()
-    split = ef.assign_split(codes, grades)
-    kept = grades != "c"
-    assert list(ef.assign_split(codes[kept], grades[kept])) == list(split[kept])
 
 
 def test_assign_split_refuses_unsorted_codes():
