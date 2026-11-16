@@ -2,182 +2,173 @@
 
 # TP1 - Démarrage
 
-
-
 ### Choix du format
 
-Nous avons choisi le format .parquet, c'est le format le plus léger entre le CSV de 9Go et celui-ci de 7.2Go
-
-Nous l'avons choisi pour sa capacité à lire les colonnes séparémment. Sa réputation sur ses performance nous a confirmé dans cette direction.
+Format Parquet retenu : plus léger que le CSV (7,2 Go contre 9 Go) et il permet de lire les colonnes séparément.
 
 # TP2 - Profiling & périmètre
 
-Renseigné les valeurs vides sur la majorité des colonnes dans le perimetre.
-Il faudra vérifier les colonnes s'approchant des 0% de valeur nulles, ceci est surement dû au fait que la colonnes ont un formattage pré-établi, il faudra éclater la structure et récupérer les valeurs nulles présentes sur les différents éléments de la structure.
+Taux de valeurs vides renseigné sur la majorité des colonnes du périmètre.
+À vérifier : les colonnes proches de 0 % de vides ont sûrement une structure imbriquée, il faudra l'éclater pour retrouver les vrais vides.
 
-# TP3 - Le dépot au propre
+# TP3 - Le dépôt au propre
 
-Le dépot nutriscope a été crée, branche main protégé, branche features, gitignore itinialisé, protection pull request activé
+Dépôt nutriscope créé : branche main protégée, branche features, .gitignore, pull request obligatoire.
 
 # TP4 - La base nutriscope
 
-création de sql/create_db.sql, modification par rapport a l'énoncé, les colonnes sont traduites en anglais
+sql/create_db.sql créé, avec les noms de colonnes traduits en anglais (écart à l'énoncé).
 
-# TP5 - Parties prenantes et persona 
+# TP5 - Parties prenantes et persona
 
-Carte des partie prenantes réalisé avec 3 personnas différentes, trame d'entretien faite et entretien "réel" fait, tout est dans docs/cadrage/parties_prenantes.md
+Carte des parties prenantes, 3 personas, trame d'entretien et un entretien réel : docs/cadrage/parties_prenantes.md.
 
 # TP6 - Opportunités et concurrence
 
-Benchmark existant fait, et matrice comparitive, Swot effectué et proposition de valeur énoncé, docs/cadrage/benchmark.md est commité
+Benchmark de l'existant, matrice comparative, SWOT et proposition de valeur : docs/cadrage/benchmark.md.
 
 # TP7 - KPI, coûts & ROI
 
-Définition des KPI, Hypothèse de cout et revenu faite, ROI fait sur les trois scénarios demandé, cependant des valeurs comme le nombre de token sont inventé, le ROI n'est pas forcément fiable, a revoir
-docs/cadrage/kpi_roi.xlsx commité
+KPI, hypothèses de coûts et revenus, ROI sur les trois scénarios : docs/cadrage/kpi_roi.xlsx.
+Limite : certaines valeurs (nombre de tokens) sont inventées, le ROI est à revoir.
 
 # TP8 - Note de cadrage & backlog
 
-Note de cadrage + backlog outillé, docs/cadrage/planning.md commité
+Note de cadrage et backlog outillé : docs/cadrage/planning.md.
 
-# TP9 - Nettoyage industrialisé 
+# TP9 - Nettoyage industrialisé
 
-Il a été décidé a partir de ce TP que chacun de nous travaillerais sur son propre repo
-En effet l'expérience entre les différents développeur est très différentes, certains travaillant beaucoup plus vite que d'autre, il vallais mieux séparer les repo afin que chacun puisse avancer a son rythme sur les TPs, car sinon il y avais de gros risque qu'un seul développeur soit responsable de plus de 80% du code, et je voulais être seul pour mieux m'approprier les différents principes et méthodes qu'on me présente dans les TP et exercices
+À partir de ce TP, chacun travaille sur son propre dépôt : nos niveaux sont très différents, et sur un dépôt commun un seul développeur aurait écrit l'essentiel du code. Seul, je m'approprie mieux les méthodes des TP.
 
 ### Fait
 
-- `src/cleaning.py` : 15 règles pures, chacune renvoie `(DataFrame, RuleReport)`, enchaînées par `clean()` dans l'ordre du TP.
-- `tests/` : 171 tests verts (règles, schéma, création de base, chargement, rapport, pipeline, extraction). Chaque règle a un test nominal, un cas tordu, un test de pureté et un test d'idempotence sur l'échantillon réel.
-- `docs/data/strategie_manquants.md` : décision par colonne et par usage, appliquée par le code.
-- `python -m src.report` : génère `docs/data/rapport_nettoyage.md`, identique d'une exécution à l'autre (à la date près).
-- Base PostgreSQL : `sql/create_db.sql` (6 tables, clés, contraintes `CHECK`), `src/create_db.py`, `src/load_db.py` (`ValueError` si `code` n'est pas unique, requêtes de contrôle).
-- `python -m src.pipeline` : lecture, nettoyage, rapport, base. Testé sur la table complète : 4 636 471 lignes lues, 1 586 106 gardées, chargement réussi. Durée 4 min 22, mémoire 4,5 à 5,5 Go, pic à 10,2 Go à la lecture.
+- src/cleaning.py : 15 règles enchaînées par clean() dans l'ordre du TP.
+- 171 tests : pour chaque règle, un cas normal, un cas limite, la pureté et l'idempotence.
+- docs/data/strategie_manquants.md : stratégie de manquants par colonne, appliquée par le code.
+- Rapport de nettoyage généré (docs/data/rapport_nettoyage.md), identique d'une exécution à l'autre.
+- Base PostgreSQL : 6 tables avec clés et contraintes CHECK, création et chargement en deux scripts.
+- Pipeline testé sur la table complète : 4 636 471 lignes lues, 1 586 106 gardées, en 4 min 22 (pic mémoire 10,2 Go à la lecture).
 
 ### Décidé
 
-- **La base ne reçoit que des données nettoyées** (elle porte des `CHECK`). L'échantillon brut des tests est donc reconstruit depuis le parquet (`scripts/make_sample_raw.py`).
-- **Création et chargement séparés** (`create_db.py`, `load_db.py`). Configuration : nom de base et mot de passe dans `db.env` (hors Git), le reste dans `CONF`. Les tests utilisent une base séparée (`TEST_DATABASE_URL`), avec un garde-fou contre la vraie base.
-- **Ordre du TP respecté : unités avant bornes.** Un sel aberrant avec un sodium valide fait perdre le sodium (on ne sait pas lequel des deux est faux).
-- **Aucune imputation statistique** dans le nettoyage : elle viendra dans le pipeline ML, après le split.
-- **Source par défaut = table complète** (`data/raw/products_nutrition.parquet`, produite par `extract.py`) ; l'échantillon reste disponible avec `--source`.
-- `pd.options.mode.copy_on_write = True` est gardée comme le TP le demande ; sous pandas 3 elle n'a plus d'effet (avertissement inoffensif).
+- La base ne reçoit que des données nettoyées, parce qu'elle porte des CHECK.
+- Mot de passe dans db.env (hors Git) ; les tests utilisent une base séparée, avec un garde-fou contre la vraie base.
+- Unités avant bornes, comme le TP : un sel aberrant avec un sodium valide fait perdre les deux, on ne sait pas lequel est faux.
+- Pas d'imputation dans le nettoyage : elle se fait dans le pipeline ML, après le split, pour éviter la fuite de données.
 
-### Bloqué / corrigé en route
+### Corrigé en route
 
-- **Idempotence de la règle 13 (corrigé).** Sur le jeu complet, une ligne à kcal = kJ = 0 avec des macronutriments minuscules était comptée « touchée » à chaque passage sans rien changer. Corrigé en ne comptant que les valeurs réellement modifiées (`_changed`), avec un test de non-régression. Deux passes de `clean()` donnent désormais un résultat identique sur le jeu complet.
-- **Chargement refusé par PostgreSQL (corrigé).** Des caractères nuls (0x00) dans `brands` faisaient échouer `COPY`. Ajout d'une sous-règle `nul_removed` dans `normalize_texts`, avec test.
+- Règle 13 non idempotente : une ligne était comptée modifiée à chaque passage sans changer. Corrigé en ne comptant que les vraies modifications.
+- Chargement PostgreSQL refusé à cause de caractères nuls dans brands : ajout d'une sous-règle qui les retire.
 
 ### Points ouverts
 
-- **Énergie résiduelle :** le rapport compte encore 612 lignes au rapport kJ/kcal hors plage et 69 lignes à kcal nulles avec macronutriments positifs. Ce sont surtout des valeurs minuscules où l'arrondi à 0,1 kcal fausse le rapport. Quelques lignes ont des macronutriments élevés pour une énergie ≤ 0,7 kcal (probablement des boissons alcoolisées, non vérifié). Laissé tel quel.
-- **Rayon `unknown` (18,9 % des produits gardés) :** la règle 5 supprime les produits sans catégorie, pas ceux au rayon inconnu. Un produit qui a des catégories mais pas de `food_groups_tag_1` reste donc, avec le rayon `unknown` à l'insertion. Conforme à l'énoncé, à garder en tête pour les analyses par rayon.
-- **Nutri-Score hors −15..40 :** 2 849 valeurs (≈ 0,2 %), laissées telles quelles, à revoir à l'analyse exploratoire (TP 10).
+- Énergie : 612 lignes au rapport kJ/kcal hors plage et 69 à 0 kcal avec des macronutriments, surtout des petites valeurs mal arrondies. Laissé tel quel.
+- Rayon unknown pour 18,9 % des produits (catégories présentes mais pas de food_groups_tag_1). Conforme à l'énoncé, à garder en tête pour les analyses par rayon.
+- 2 849 Nutri-Scores hors −15..40 (0,2 %), laissés tels quels.
 
 ### Écarts avec l'énoncé
 
-- Nous travaillons sur le parquet Open Food Facts et non sur `echantillon_france.csv` : les comptes de contrôle de l'énoncé ne sont pas comparables aux nôtres.
-- Le rayon est `food_groups_tag_1` (pas `pnns_groups_1`) ; un rayon manquant devient `unknown` en base.
-- PostgreSQL à la place de SQLite, pandas 3.0 à la place de 2.3.
+- Parquet Open Food Facts au lieu de echantillon_france.csv : les comptes de l'énoncé ne sont pas comparables.
+- Rayon = food_groups_tag_1 au lieu de pnns_groups_1.
+- PostgreSQL au lieu de SQLite, pandas 3.0 au lieu de 2.3.
 
 # TP10 - Analyse exploratoire
 
-Passé pour le moment
+Passé pour le moment.
 
 # TP11 - Datastorytelling
 
-Passé pour le moment
+Passé pour le moment.
 
 # TP12 - Parquet & DuckDB
 
 ### Décisions
 
-- CSV non mesuré dans le benchmark : le format Parquet est retenu depuis le TP 1, toute la chaîne en part. pandas lit le Parquet nettoyé (colonnes utiles seulement) ; le bonus « DuckDB sur CSV » est remplacé par DuckDB sur le Parquet non partitionné, qui mesure l'effet du partitionnement.
-- Requêtes du benchmark choisies d'après l'énoncé du TP 10, l'EDA n'étant pas encore réalisée.
-- Mémoire mesurée par psutil sous Windows (resource n'y existe pas) et par VmHWM sous Linux : ru_maxrss reprenait le pic du processus parent (161 Mo pour tous les moteurs).
-- Deux documents de benchmark : docs/data/benchmark_mesures.md, généré par le script (à ne pas modifier à la main), et docs/data/benchmark.md, rédigé (lecture, limites, conséquences).
-- Journal des durées (data/durees.jsonl) ajouté en anticipation du TP 13 : aucune mesure codée en dur ni saisie à la main, la base n'étant construite que par le pipeline, et le TP 13 le demandera. Contrainte : seules les étapes réussies sont inscrites pour l'instant ; les échecs viendront avec l'orchestration (TP 13).
-- Export features : 
-    tolérance de 0,5 conservée dans les filtres (sucres ≤ glucides + 0,5, saturés ≤ lipides + 0,5), comme au nettoyage, au lieu de l'inégalité stricte de l'énoncé.
-    ratios bornés à [0, 1] (plafond à 1, nombre de produits plafonnés écrit dans le schéma), 0 si numérateur et dénominateur valent 0, NULL si seul le dénominateur vaut 0. Règles propres à l'export, le nettoyage n'est pas modifié. Raison : sur l'extrait France, des dénominateurs minuscules donnaient des ratios jusqu'à 1 million.
-    schéma nommé features_nutriscore_<AAAAMMJJ>.schema.json (au lieu de schema.json) pour que plusieurs exports datés coexistent dans data/exports/.
-    politique de manquants « flag », lue dans cleaning.DEFAULT_MISSING_STRATEGY (flag par défaut pour additives_n et les ratios). Les colonnes _missing ne sont pas exportées : la politique est écrite dans le schéma et sera appliquée au TP 14.
-- Les sept nutriments clés sont centralisés dans config.CORE_NUTRIENTS (benchmark et export).
-- Les schémas JSON (schema_produits.json, schéma de l'export) ne sont pas committés : ils restent à côté de leurs données dans data/, ignoré par Git.
+- CSV non mesuré dans le benchmark, parce que le Parquet est retenu depuis le TP 1. Le bonus « DuckDB sur CSV » est remplacé par DuckDB sur le Parquet non partitionné, pour mesurer l'effet du partitionnement.
+- Mémoire mesurée avec psutil, parce que le module resource n'existe pas sous Windows.
+- Deux documents : benchmark_mesures.md, généré par le script, et benchmark.md, rédigé à la main.
+- Journal des durées écrit par le pipeline, pour n'avoir aucune mesure saisie à la main.
+- Export features :
+    tolérance de 0,5 dans les filtres (sucres ≤ glucides + 0,5), comme au nettoyage, au lieu de l'inégalité stricte de l'énoncé.
+    ratios bornés à [0, 1], parce que des dénominateurs minuscules donnaient des ratios jusqu'à 1 million.
+    schéma daté (features_nutriscore_<AAAAMMJJ>.schema.json) pour que plusieurs exports coexistent.
+    pas de colonnes _missing : les manquants sont traités dans le pipeline ML.
+- Les schémas JSON restent à côté de leurs données dans data/, hors Git.
 
-### À reprendre plus tard
+### À reprendre
 
-- Après l'EDA (TP 10) : revoir les requêtes du benchmark et la rédaction de docs/data/benchmark.md.
-- Après les TP 10, 13 et 14 : revoir docs/architecture.md (mentions « À faire », paragraphe de l'exercice 3.5.2, API, assistant, phase 6-7).
-- TP 13 : en fin de session, après les TP 12 et 13, revoir les tests superflus et mettre en commun raw_product, needs_db et TEST_DATABASE_URL dans tests/conftest.py (aujourd'hui répétés dans plusieurs fichiers de test).
-- TP 13 : renommer le paramètre run de run_queries.checks (même nom que la fonction run du module).
-- TP 13 : inscrire aussi les étapes en échec dans le journal des durées (data/durees.jsonl), avec l'orchestration.
-- TP 13 : commande unique qui enchaîne extraction, pipeline, conversion, contrôles et export (déjà signalée dans docs/architecture.md).
-- TP 13 : découpage train / test de l'export features, stratifié sur la cible, avec sa graine, gelé dans data/exports/.
-- TP 14 : appliquer la politique de manquants écrite dans le schéma de l'export (flag), les colonnes _missing n'étant pas exportées.
+- Après l'EDA : revoir les requêtes du benchmark et docs/data/benchmark.md.
+- Après les TP 10, 13 et 14 : mettre à jour docs/architecture.md.
 
 # TP13 - Pipeline bout-en-bout
 
 ### Décisions
 
-- Point d'entrée : package nutriscope/ avec pipeline.py, lancé par python -m nutriscope.pipeline [load|clean|load_db|parquet|export|all|reset]. CLI seule, sans Makefile : make n'est pas installé par défaut sous Windows ni sous Git Bash, et l'équipe qui teste le dépôt devrait l'installer aussi ; la CLI suffit à l'énoncé.
-- src/pipeline.py (TP 9) renommé src/clean_pipeline.py pour éviter deux pipeline.py ; gardé comme module et importé, pas recopié. Son run() est découpé en clean() et load_database() ; load_database() relit le nettoyé sur disque, donc la base et le Parquet partent du même fichier.
-- Les cinq étapes ont la même signature, (RunContext) -> StepResult : un contexte créé une fois dans main() (périmètre, source, date, options, dossiers), non modifiable.
-- Contrôles : load_db lance les cinq contrôles sur la base seule (run_queries.check_database) ; parquet compare le Parquet à la base (run_queries.check_parquet_against_database) et échoue s'ils diffèrent.
-- Sorties datées <préfixe>_<AAAAMMJJ>, noms en anglais : france_extract, products_nutrition, products_clean, products (dossier partitionné), features_nutriscore. Chaque étape lit son entrée du jour, sinon la plus récente, sinon elle échoue en disant quelle étape lancer ; un dossier partitionné sans _SUCCESS est ignoré.
-- Trois versions gardées par type de sortie (config.KEEP_VERSIONS), supprimées seulement après une écriture réussie ; jamais pour les exports, figés.
-- Étape load : manifeste à côté du brut, avec le SHA-256 de la source (data/food.parquet, 7,7 Go ; calcul compris dans les 18 à 20 s de l'étape) et celui du brut ; l'horodatage est dans le manifeste, jamais dans les données.
-- Source : --source, sinon la variable NUTRISCOPE_SOURCE (terminal ou db.env, chemin relatif depuis la racine du dépôt), sinon data/food.parquet. food.parquet se télécharge à la main.
-- Périmètres : extrait France par défaut (data/), --full (data/full/), --sample (data/sample/) ; load accepte une source déjà aplatie (l'échantillon), recopiée sans extraction, pour que all tourne aussi sur l'échantillon.
-- Journal des durées renommé data/durations.jsonl ; une ligne par étape du pipeline, avec status ok ou failed et le message d'erreur, en plus des sous-étapes (noms en anglais : read, clean_rules, write_clean, report, db_schema, db_load, convert_parquet).
-- Split : colonne split dans l'export, stratifiée sur nutriscore_grade, 20 % de test pour chaque grade, graine 42, un générateur par grade sur les produits triés par code. Méthode, graine, effectifs par grade et règles d'usage dans le schéma.
-- Options : --date AAAAMMJJ pour rejouer une date, --force pour réécrire l'export, --docs pour écrire les rapports dans docs/data/ (par défaut ils vont dans data/reports/, hors Git), reset pour supprimer les sorties datées sans toucher aux exports.
-- pyproject.toml ajouté pour pip install -e . : la commande marche depuis n'importe quel dossier (non demandé par l'énoncé, cité dans son dépannage).
-- docker-compose.yml versionné ; il lit db.env (env_file) pour le mot de passe, rien de secret dans Git.
+- Point d'entrée unique : python -m nutriscope.pipeline [load|clean|load_db|parquet|export|all|reset]. Pas de Makefile, parce que make n'est pas installé par défaut sous Windows.
+- Ancien src/pipeline.py renommé src/clean_pipeline.py pour ne pas avoir deux pipeline.py.
+- Les cinq étapes ont la même signature et reçoivent le même contexte, créé une fois au lancement.
+- Contrôles automatiques : la base est vérifiée après chargement, le Parquet est comparé à la base.
+- Sorties datées (<nom>_<AAAAMMJJ>) : chaque étape lit la sortie la plus récente de l'étape d'avant, sinon elle dit quelle étape lancer.
+- Trois versions gardées par sortie ; les exports ne sont jamais supprimés, parce qu'ils sont figés.
+- Manifeste avec le SHA-256 de la source et du brut, pour prouver d'où viennent les données.
+- Trois périmètres : France (par défaut), --full, --sample.
+- Split : colonne split dans l'export, stratifiée sur le grade, 20 % de test, graine 42, figée pour que tous les modèles soient comparés sur le même test (méthode revue le 16/11).
+- pyproject.toml ajouté pour pip install -e . (non demandé, cité dans le dépannage de l'énoncé).
+- docker-compose.yml versionné ; le mot de passe reste dans db.env.
 
 ### Écarts à l'énoncé
 
-- Noms d'étapes en anglais : charger -> load, nettoyer -> clean, charger_base -> load_db, parquet -> parquet, exports -> export.
-- Export nommé features_nutriscore_<AAAAMMJJ> (nom du TP 12) au lieu de features_<AAAAMMJJ>.
-- Pas de data/db/ : la base est un serveur PostgreSQL en conteneur Docker, pas un fichier.
+- Noms d'étapes en anglais (load, clean, load_db, parquet, export).
+- Export nommé features_nutriscore_<AAAAMMJJ> au lieu de features_<AAAAMMJJ>.
+- Pas de data/db/ : la base est un serveur PostgreSQL dans Docker.
 
 ### Résultats
 
-- Extrait France : 1 247 336 lignes brutes, 521 240 nettoyées (base = Parquet), 456 380 dans l'export ; 20,0 % de test pour chaque grade. Pipeline complet en 116 à 118 s, dont 69 à 71 s pour load_db (62 s de chargement des tables) : pas besoin d'orchestrateur.
-- Reproductibilité : l'export du 10/11, produit dans un clone neuf (autre dossier, autre venv, autre conteneur), a le même SHA-256 que celui du 09/11 dans le dépôt de travail (82e5ad23…).
-- Test du README dans un clone neuf : fait. Manques corrigés : création de data/, conflit de port et de nom de conteneur si un PostgreSQL tourne déjà, tests sautés sans échantillon.
+- Extrait France : 1 247 336 lignes brutes, 521 240 nettoyées, 456 380 dans l'export. Pipeline complet en 2 min environ : pas besoin d'orchestrateur.
+- Reproductibilité : export du 10/11 refait dans un clone neuf, même SHA-256 que celui du 09/11 (avant le changement de split du 16/11).
+- README testé dans un clone neuf, manques corrigés.
 
 ### À reprendre
 
-- docs/architecture.md : mettre à jour les anciennes commandes (python -m src.…) et les anciens noms non datés, et passer le schéma du flux en liste de flèches comme dans docs/data/pipeline.md (en plus de la reprise prévue après les TP 10, 13 et 14).
-- Script de téléchargement automatique de food.parquet, appelé à part, hors pipeline.
+- docs/architecture.md : mettre à jour les commandes et les noms.
+- Script de téléchargement de food.parquet, hors pipeline.
 
-# TP 14 — Prédire le Nutri-Score (classification a→e)
+# TP 14 - Prédire le Nutri-Score (classification a→e)
 
-### Synthèse :
+### Synthèse
 
-la forêt aléatoire `class_weight="balanced"` prédit le grade avec un F1 macro de 0,920 sur le test
-(0,898 sur les produits sans jumeau dans le train), contre 0,77 pour la régression logistique et 0,09 pour la classe
-majoritaire ; ses erreurs ne portent que sur des grades voisins, et les plus confiantes relèvent des données
-(fiches fausses, catégorie absente, algorithme des boissons), pas du modèle.
+La forêt aléatoire (class_weight="balanced") obtient un F1 macro de 0,920 sur le test (0,898 sans les jumeaux), contre 0,77 pour la régression logistique et 0,09 pour la classe majoritaire. Ses erreurs portent sur des grades voisins, et les plus confiantes viennent des données (fiches fausses, catégorie absente, boissons), pas du modèle.
 
-### Données :
+### Données
 
-export `features_nutriscore_<AAAAMMJJ>` (split figé, CV 5 plis stratifiée dans le train, test regardé une fois).
-Features : 7 nutriments, fibres, fruits-légumes, NOVA (nombre), additifs, `aisle`, `aisle2` + 3 ratios et l'écart
-d'énergie relatif (plafonné à ±1) calculés dans le pipeline ; imputation médiane + indicateur, standardisation, one-hot.
+Export features avec split figé, validation croisée à 5 plis dans le train, test regardé une seule fois.
+Features : nutriments, fibres, fruits-légumes, NOVA, additifs, rayons, 3 ratios et l'écart d'énergie ; imputation médiane, standardisation, one-hot.
 
+### Constats
 
-### Constats :
-- Piège de l'accuracy : classe majoritaire à 0,29 d'accuracy pour 0,09 de F1 macro (rapport 3,2).
-- Jumeaux : ~20 % des produits de validation ont un jumeau exact (13 features identiques) dans l'entraînement ;
-  ils gonflent le F1 de la forêt d'environ 0,02. Mesure « sans jumeau » ajoutée partout.
-- Fuite : `nutriscore_score` donne 0,994 et 88 % de l'importance ; retirée, garde-fou testé ;
-  contrôle négatif (`completeness`) sans signal.
-- Importances cohérentes avec le barème (sel, sucres, saturés en tête) ; lipides, glucides et rayons = proxies.
-- Déséquilibre (e/b ≈ 2,8) : `balanced` retenu ; SMOTE n'apporte pas plus, mal placé il gonfle le F1 de +0,035.
+- L'accuracy trompe : la classe majoritaire a 0,29 d'accuracy mais 0,09 de F1 macro, d'où le choix du F1 macro.
+- Jumeaux : 20 % des produits de validation ont un jumeau exact dans le train, ce qui gonfle le F1 d'environ 0,02. Mesure « sans jumeau » ajoutée.
+- Fuite : nutriscore_score donnait 0,994 de F1 ; retiré des features, avec un garde-fou testé.
+- Importances cohérentes avec le barème Nutri-Score (sel, sucres, saturés en tête).
+- Déséquilibre des classes : class_weight="balanced" retenu, SMOTE n'apporte rien de plus.
 
-### Actions pour le TP 9 :
+### Actions pour le TP 9
 
-Estimer les fruits-légumes par la catégorie ; marquer comme suspect le grade d'une fiche
-dont l'énergie a été corrigée. **Limite** : produits notés avec l'algorithme des boissons (poudres, édulcorants).
+Estimer les fruits-légumes à partir de la catégorie ; marquer comme suspect le grade d'une fiche dont l'énergie a été corrigée.
+Limite : les produits notés avec l'algorithme des boissons.
+
+# 16/11/2026 - Refactorisation de export_features.py
+
+Objectif : modifier le fichier pour pouvoir l'expliquer plus simplement (détail dans le commit 2548d17).
+
+### Décisions
+
+- Split : train_test_split de scikit-learn (stratifié sur le grade, graine 42, 20 % de test) à la place du générateur fait main, parce que c'est l'outil standard, plus court et plus facile à justifier.
+- Requête SQL écrite en clair dans _build_query, parce qu'elle se lit d'un coup au lieu d'être assemblée par plusieurs fonctions.
+- Schéma allégé (plus de ratios plafonnés, de politique de manquants ni d'infos Git), parce que ces informations n'étaient pas demandées et compliquaient le code.
+
+### À reprendre
+
+- Le split a changé : un nouvel export n'aura plus le même SHA-256 que ceux du 09/11 et du 10/11.
+- La politique de manquants n'est plus dans le schéma : la lire dans cleaning.DEFAULT_MISSING_STRATEGY.
