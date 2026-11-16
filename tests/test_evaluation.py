@@ -1,14 +1,15 @@
-"""Tests de src/ml/evaluation.py : plis, empreinte des jumeaux, évaluation en validation croisée."""
+"""Tests de src/ml/evaluation.py : plis, empreinte des jumeaux, validation croisée, évaluation sur le test."""
 
 import numpy as np
 import pandas as pd
 import pytest
 from sklearn.dummy import DummyClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.exceptions import NotFittedError
 from sklearn.model_selection import cross_validate
 from sklearn.tree import DecisionTreeClassifier
 
-from src.ml.evaluation import METRICS, N_SPLITS, evaluate_model, fingerprint, make_cv
+from src.ml.evaluation import METRICS, N_SPLITS, evaluate_model, evaluate_on_test, fingerprint, make_cv
 from src.ml.features import FEATURES, NUMERIC_FEATURES
 from src.ml.modeling import RANDOM_STATE, build_pipeline
 
@@ -131,3 +132,50 @@ def test_twins_are_recognised_by_a_memorising_model(products):
     model = build_pipeline(DecisionTreeClassifier(random_state=RANDOM_STATE))
     summary, _ = evaluate_model(model, X_doubled, y_doubled, cv=_CopySplit(len(X)))
     assert summary["f1_macro_mean"] == pytest.approx(1.0)
+
+
+# --- Évaluation sur le test ---
+def test_evaluate_on_test_summary_and_predictions(products):
+    X, y = products
+    X_train, y_train, X_test, y_test = X.iloc[:150], y.iloc[:150], X.iloc[150:], y.iloc[150:]
+    summary, predictions, _ = evaluate_on_test(build_pipeline(DummyClassifier()), X_train, y_train, X_test, y_test)
+
+    for name in METRICS:
+        assert name in summary and f"{name}_without_twin" in summary
+    assert {"fit_time_s", "predict_time_s", "twin_share"} <= set(summary)
+    assert predictions.index.equals(y_test.index)
+
+
+def test_evaluate_on_test_matches_a_manual_fit(products):
+    X, y = products
+    X_train, y_train, X_test, y_test = X.iloc[:150], y.iloc[:150], X.iloc[150:], y.iloc[150:]
+    pipeline = build_pipeline(RandomForestClassifier(n_estimators=20, random_state=RANDOM_STATE))
+    summary, predictions, _ = evaluate_on_test(pipeline, X_train, y_train, X_test, y_test)
+
+    manual = pipeline.fit(X_train, y_train).predict(X_test)
+    np.testing.assert_array_equal(predictions.to_numpy(), manual)
+    assert summary["f1_macro"] == pytest.approx(METRICS["f1_macro"](y_test, manual))
+
+
+def test_evaluate_on_test_returns_a_fitted_copy(products):
+    X, y = products
+    pipeline = build_pipeline(DummyClassifier())
+    _, _, fitted = evaluate_on_test(pipeline, X.iloc[:150], y.iloc[:150], X.iloc[150:], y.iloc[150:])
+    assert fitted is not pipeline
+    fitted.predict(X.head(1))                  # la copie est ajustée
+    with pytest.raises(NotFittedError):
+        pipeline.predict(X.head(1))            # l'original n'est pas touché
+
+
+def test_evaluate_on_test_without_twin_when_test_has_no_twin(products):
+    X, y = products
+    summary, _, _ = evaluate_on_test(build_pipeline(DummyClassifier()), X.iloc[:150], y.iloc[:150], X.iloc[150:], y.iloc[150:])
+    assert summary["twin_share"] == 0.0
+    assert summary["f1_macro_without_twin"] == pytest.approx(summary["f1_macro"])
+
+
+def test_evaluate_on_test_every_test_product_has_a_twin(products):
+    X, y = products
+    summary, _, _ = evaluate_on_test(build_pipeline(DummyClassifier()), X, y, X.iloc[:50], y.iloc[:50])
+    assert summary["twin_share"] == 1.0
+    assert np.isnan(summary["f1_macro_without_twin"])
