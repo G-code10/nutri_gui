@@ -15,7 +15,10 @@ from src.ml.features import (
     FEATURES,
     FORBIDDEN,
     NUMERIC_FEATURES,
+    GRADE_CODES,
     add_derived_features,
+    decode_target,
+    encode_target,
     features_and_target,
     load_features,
     split_train_test,
@@ -97,6 +100,34 @@ def test_features_and_target(products):
 def test_features_and_target_missing_feature_raises(products):
     with pytest.raises(KeyError):
         features_and_target(products.drop(columns="aisle2"))
+
+
+# --- Codage de la cible ---
+def test_grade_codes_follow_nutriscore_order():
+    assert GRADE_CODES == {"a": 0, "b": 1, "c": 2, "d": 3, "e": 4}
+
+
+def test_encode_then_decode_gives_back_the_grades(products):
+    _, y = features_and_target(products)
+    codes = encode_target(y)
+    assert codes.dtype == "int64"
+    assert codes.index.equals(y.index) and codes.name == y.name
+    pd.testing.assert_series_equal(decode_target(codes), y)
+
+
+def test_decode_target_on_array_returns_array():
+    np.testing.assert_array_equal(decode_target(np.array([4, 0, 2])), np.array(["e", "a", "c"]))
+
+
+def test_encode_target_unknown_grade_raises():
+    with pytest.raises(ValueError, match="inconnues"):
+        encode_target(pd.Series(["a", "unknown", "e"]))
+
+
+@pytest.mark.parametrize("codes", [np.array([0, 5]), np.array([-1, 2]), np.array([1.5, 2.0])])
+def test_decode_target_invalid_code_raises(codes):
+    with pytest.raises(ValueError, match="invalides"):
+        decode_target(codes)
 
 
 # --- Features dérivées : ratios ---

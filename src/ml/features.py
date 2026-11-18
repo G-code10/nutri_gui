@@ -11,10 +11,21 @@ from __future__ import annotations
 import datetime
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 
 from src import config
-from src.storage.export_features import EXPORT_PREFIX, IDENTIFIER, RATIO_MAX, RATIOS, SPLIT, TARGET, TEST, TRAIN
+from src.storage.export_features import (
+    EXPORT_PREFIX,
+    GRADES,
+    IDENTIFIER,
+    RATIO_MAX,
+    RATIOS,
+    SPLIT,
+    TARGET,
+    TEST,
+    TRAIN,
+)
 from src.utils import require_input
 
 CATEGORICAL_FEATURES = ["aisle", "aisle2"]
@@ -39,6 +50,9 @@ ENERGY_GAP_MAX = 1.0
 
 EXPORT_HINT = "python -m src.storage.export_features"
 
+# Codage de la cible pour les modèles qui exigent des entiers (XGBoost) : a=0 ... e=4, ordre du Nutri-Score
+GRADE_CODES = {grade: code for code, grade in enumerate(GRADES)}
+
 
 def load_features(path: Path | None = None, day: datetime.date | None = None) -> pd.DataFrame:
     """Export features : `path` s'il est donné, sinon la version datée de `day` (aujourd'hui par défaut) ou la plus récente avant.
@@ -57,6 +71,28 @@ def split_train_test(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
 def features_and_target(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.Series]:
     """(X, y) : les 13 features et la cible ; lève KeyError si une feature manque dans `df`."""
     return df[FEATURES], df[TARGET]
+
+
+def encode_target(y: pd.Series) -> pd.Series:
+    """Grades a à e -> entiers 0 à 4 (index et nom conservés) ; lève ValueError si une valeur n'est pas un grade."""
+    unknown = set(y.unique()) - set(GRADES)
+    if unknown:
+        raise ValueError(f"Valeurs de cible inconnues (attendu {GRADES}) : {sorted(map(str, unknown))}")
+    return y.map(GRADE_CODES).astype("int64")
+
+
+def decode_target(codes: pd.Series | np.ndarray) -> pd.Series | np.ndarray:
+    """Entiers 0 à 4 -> grades a à e ; Series en entrée -> Series (index conservé), sinon tableau numpy.
+
+    Lève ValueError si un code n'est pas un entier de 0 à len(GRADES) - 1.
+    """
+    values = np.asarray(codes)
+    if not np.isin(values, np.arange(len(GRADES))).all():
+        raise ValueError(f"Codes de cible invalides (attendu 0 à {len(GRADES) - 1})")
+    letters = np.asarray(GRADES)[values.astype(int)]
+    if isinstance(codes, pd.Series):
+        return pd.Series(letters, index=codes.index, name=codes.name)
+    return letters
 
 
 def _safe_ratio(numerator: pd.Series, denominator: pd.Series) -> pd.Series:

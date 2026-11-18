@@ -92,3 +92,35 @@ def evaluate_model(
     # Écart-type de population (ddof=0), comme numpy dans cross_validate
     summary |= {f"{column}_std": folds[column].std(ddof=0) for column in folds}
     return summary, oof_predictions
+
+
+def evaluate_on_test(
+    pipeline: BaseEstimator,
+    X_train: pd.DataFrame,
+    y_train: pd.Series,
+    X_test: pd.DataFrame,
+    y_test: pd.Series,
+    train_fingerprints: pd.Series | None = None,
+) -> tuple[dict[str, float], pd.Series, BaseEstimator]:
+    """Ajuste une copie de `pipeline` sur tout le train, puis le mesure sur le test (tous les produits et sans jumeau).
+
+    Le test se regarde une seule fois : à n'appeler qu'une fois par modèle, après toutes les décisions.
+    Renvoie (métriques, part de jumeaux et temps, prédictions alignées sur y_test, pipeline ajusté) ;
+    `pipeline` lui-même n'est pas modifié. Clés : <métrique>, <métrique>_without_twin, twin_share, fit_time_s, predict_time_s.
+    """
+    train_fingerprints = fingerprint(X_train) if train_fingerprints is None else train_fingerprints
+    model = clone(pipeline)
+
+    start = time.perf_counter()
+    model.fit(X_train, y_train)
+    fit_time = time.perf_counter() - start
+
+    start = time.perf_counter()
+    y_pred = model.predict(X_test)
+    predict_time = time.perf_counter() - start
+
+    has_twin = fingerprint(X_test).isin(set(train_fingerprints)).to_numpy()
+    summary = {"fit_time_s": fit_time, "predict_time_s": predict_time, "twin_share": float(has_twin.mean())}
+    summary |= _score(y_test, y_pred)
+    summary |= {f"{name}_without_twin": value for name, value in _score(y_test[~has_twin], y_pred[~has_twin]).items()}
+    return summary, pd.Series(y_pred, index=y_test.index, name=y_test.name), model
