@@ -8,3 +8,5 @@ psycopg[binary]==3.3.6   # connexion à PostgreSQL
 python-dotenv==1.2.4     # lecture de db.env
 psutil==7.2.2            # mesure de la mémoire (benchmark)
 scikit-learn==1.9.1      # split train/test, modèles, validation croisée, métriques
+openai==3.46.0           # appels aux LLM au format OpenAI (Ollama local et API en ligne)
+pillow==12.3.0           # ouverture, rotation, redimensionnement et ré-encodage des photos avant envoi au modèle
