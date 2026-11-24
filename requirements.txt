@@ -8,5 +8,13 @@ psycopg[binary]==3.3.6   # connexion à PostgreSQL
 python-dotenv==1.2.4     # lecture de db.env
 psutil==7.2.2            # mesure de la mémoire (benchmark)
 scikit-learn==1.9.1      # split train/test, modèles, validation croisée, métriques
-openai==3.46.0           # appels aux LLM au format OpenAI (Ollama local et API en ligne)
+openai==3.46.0           # appels aux LLM au format OpenAI Ollama local|API web
 pillow==12.3.0           # ouverture, rotation, redimensionnement et ré-encodage des photos avant envoi au modèle
+langchain==1.5.2         # agent conversationnel : outils (@tool) et boucle de l'agent (create_agent)
+langchain-openai==1.8.5  # modèle de chat LangChain au format OpenAI Ollama local|API web
+langgraph==1.2.24        # mémoire courte de l'agent
+chromadb==1.5.9          # base vectorielle du RAG
+llama-index-core==0.14.26                # RAG : lecture, découpage et indexation des documents, recherche
+llama-index-vector-stores-chroma==0.7.0  # branche LlamaIndex sur la base Chroma
+llama-index-embeddings-ollama==0.11.0    # vectorise documents et questions avec le modèle d'embeddings d'Ollama
+mlflow==3.18.0           # suivi des entraînements (paramètres, métriques, modèles sauvegardés) et traces de l'assistant, en local

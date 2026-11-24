@@ -172,3 +172,41 @@ Objectif : modifier le fichier pour pouvoir l'expliquer plus simplement (détail
 
 - Le split a changé : un nouvel export n'aura plus le même SHA-256 que ceux du 09/11 et du 10/11.
 - La politique de manquants n'est plus dans le schéma : la lire dans cleaning.DEFAULT_MISSING_STRATEGY.
+
+# 23/11/2026 - Préparation de l'assistant (TP 21)
+
+Objectif : décider comment construire l'assistant conversationnel (agent, RAG, outils ML et DL) à partir du cours 006 sur les frameworks LLM.
+
+### Décisions
+
+- L'agent n'est pas une compétence du référentiel en lui-même. Il sert surtout C1.5 (présenter les modèles aux utilisateurs) et C3.1 (veille, IA générative). Il devra être exposé par une API web, un notebook ne suffit pas.
+- Deux outils distincts pour un produit. La recherche par code-barres dans la base renvoie le grade déjà connu, sans ML. La prédiction du Nutri-Score ne sert que pour un produit inconnu, à partir de son étiquette scannée, parce que prédire un grade déjà en base n'a pas d'intérêt.
+- LlamaIndex pour le RAG, LangChain pour orchestrer l'assistant. Le corpus sera fait de documents bruts de formats variés : LlamaIndex fournit leur lecture, leur découpage et leur réindexation, qu'il faudrait sinon écrire à la main format par format. Je veux aussi maîtriser cet outil pour des utilisations futures. Ses vecteurs sont stockés dans Chroma. LlamaIndex ne fait que chercher, c'est LangChain qui génère les réponses (pas de llama-index-llms-ollama). LangSmith est écarté parce que c'est un service en ligne (les conversations sortiraient de la machine).
+- MLflow pour le suivi, en local. Côté ML, chaque entraînement garde ses hyperparamètres, ses métriques et le modèle sauvegardé, ce qu'un fichier joblib seul ne garde pas. Côté assistant, il remplace LangSmith pour tracer les conversations sans que rien ne sorte de la machine. Le modèle reste sérialisé avec pickle, donc ne jamais charger un modèle d'origine inconnue. Les données de MLflow (mlruns/) restent hors Git. Le journal JSONL demandé au TP 21 reste nécessaire. Pas de serveur MLflow dans docker-compose pour l'instant : un dossier local suffit pour apprendre l'outil.
+- Dépendances ajoutées à requirements.txt (pas encore installées) : langchain, langchain-openai, langgraph pour l'assistant, chromadb, llama-index-core, llama-index-vector-stores-chroma, llama-index-embeddings-ollama pour le RAG, mlflow pour le suivi. ChatOpenAI plutôt que ChatOllama, parce que c'est le même format OpenAI que l'atelier scanner : on passe d'Ollama à un fournisseur en ligne en changeant l'adresse et le nom du modèle.
+- Plan du TP 21 : outils search_product, suggest_substitutes et answer_with_sources en placeholders qui respectent les contrats du TP 18 et du TP 19, données inventées signalées comme telles. Pour le RAG, d'abord un placeholder, puis un mini-index LlamaIndex sur quelques documents si le temps le permet. Mémoire courte avec InMemorySaver (un thread_id par conversation). Journalisation simple (chronomètre autour de chaque échange, outils et tokens lus dans les messages, une ligne JSONL par échange) plutôt qu'une classe de callbacks.
+- RGPD : une photo d'étiquette peut contenir des données personnelles (visage, ticket, coordonnées GPS dans les EXIF). Avant un envoi chez un fournisseur en ligne, l'utilisateur doit savoir quelle donnée part, chez qui, pour quoi et combien de temps elle est gardée. Sinon, analyse en local avec Ollama.
+
+### Essai des traces MLflow
+
+Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un outil factice), MLflow 3.18 avec mlflow.langchain.autolog().
+
+- Les tokens de chaque appel au modèle sont dans la trace, identiques à usage_metadata (167 et 241, puis 240 et 378), avec le total de l'échange (407 en entrée, 619 en sortie).
+- La trace donne la durée de chaque étape : 14,3 s pour l'échange, environ 7 s par appel au modèle, moins de 0,01 s pour l'outil.
+- Deux appels au modèle par question avec un outil : le premier demande l'outil, le second rédige la réponse. Le second relit tout l'historique, d'où plus de tokens en entrée.
+- MLflow écrit ses traces en arrière-plan : pour les relire aussitôt dans le code, il faut forcer l'écriture (MLFLOW_ENABLE_ASYNC_TRACE_LOGGING=false).
+- Avec un stockage SQLite, ajouter mlflow.db au .gitignore.
+- qwen3:8b produit beaucoup de tokens de sortie, même pour un simple appel d'outil (il raisonne avant de répondre) : piste pour réduire la latence.
+
+### À reprendre
+
+- src/ml : aucun modèle sauvegardé ni fonction de prédiction pour un seul produit. Entraînement final et sauvegarde à faire avec MLflow.
+- Mesurer la baisse du F1 macro quand les colonnes absentes d'une étiquette (nova_group, aisle, aisle2, peut-être fruits-légumes et additifs) sont mises à NaN. À faire sur une validation tirée du train, pas sur le test, pour garder le test neutre.
+- Vérifier si load_image (atelier scanner) supprime les EXIF au ré-encodage.
+- langsmith est installé automatiquement avec langchain : vérifier que LANGSMITH_TRACING n'est pas activé.
+- Rédiger une ADR sur les choix d'outils de l'assistant (LangChain, LlamaIndex, MLflow).
+- Reporter la justification des nouvelles librairies dans le README.
+- RAG : choisir entre tout indexer avec LlamaIndex (fiches et documents) ou garder les fiches dans rechercher().
+- Ajouter un lecteur de fichiers selon les formats du corpus (par exemple pypdf pour les PDF).
+- Noms des outils en anglais : écart au contrat du TP 18, qui impose chercher_produit à toutes les équipes. À signaler à la revue croisée.
+- Au déploiement (J6) : envisager un serveur MLflow dans docker-compose, avec ses données dans PostgreSQL, pour que l'API charge le modèle depuis ce serveur.

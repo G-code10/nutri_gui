@@ -5,6 +5,7 @@
 __pycache__
 *.egg-info/
 db.env
+mlruns/
 # Afin de pouvoir travailler avec les brouillons à jour, ces lignes sont commentées
 # /notesbooks/christian
 # /notesbooks/guillaume
