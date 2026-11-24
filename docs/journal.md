@@ -210,3 +210,22 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 - Ajouter un lecteur de fichiers selon les formats du corpus (par exemple pypdf pour les PDF).
 - Noms des outils en anglais : écart au contrat du TP 18, qui impose chercher_produit à toutes les équipes. À signaler à la revue croisée.
 - Au déploiement (J6) : envisager un serveur MLflow dans docker-compose, avec ses données dans PostgreSQL, pour que l'API charge le modèle depuis ce serveur.
+
+# 24/11/2026 - Corpus du RAG et lecteurs de fichiers (TP 21)
+
+### Décisions
+
+- Corpus du RAG : les pages et documents officiels conseillés (Vie publique, Santé.fr, Santé publique France, recommandations PNNS adultes, avis du HCSP de 2017). Ciqual n'est pas retenu.
+- Le tableau des sources (id, titre, éditeur, URL, dates, licence) sera versionné dans docs/ : il sert C1.2 (sources listées) et C5.5 (licences). Trois licences restent à vérifier (Santé.fr, Santé publique France).
+- llama-index-readers-file écarté : toutes ses versions récentes imposent pandas<3, ce qui aurait rétrogradé pandas 3.0.5 pour tout le projet (pipeline du bloc 2, pandera). À la place : pypdf pour les PDF et beautifulsoup4 pour les pages web (balise "main" seulement). Deux petites fonctions rendent des "Document" LlamaIndex, qui reste chargé du découpage, de l'indexation dans Chroma et de la recherche.
+- pypdf 6.21.4 et beautifulsoup4 4.15.0 installés, aucun conflit (pip check), pandas toujours en 3.0.5.
+
+### À reprendre
+
+- Télécharger les 5 documents dans data/corpus/ et remplir le tableau des sources.
+- Lire les conditions d'utilisation de Santé.fr et de Santé publique France avant d'indexer.
+- Vérifier pour chaque page que le contenu utile est bien dans la balise "main".
+- Section 3 du notebook TP 21 limitée aux 5 documents. Les fiches produits passent par l'outil search_product.
+- Pour le vrai code (src/) : le TP 19 demande aussi les fiches produits dans le corpus (une fiche = un morceau, documents longs découpés avec chevauchement). Décider si on les indexe avec LlamaIndex.
+- Tableau des sources et licences à écrire dans docs/ia/corpus.md (fichier attendu par le TP 19).
+- Jeu d'évaluation du TP 20 : 30 questions (factuelles, comparatives, 5 pièges hors périmètre) avec réponses et sources attendues, hit rate et MRR, deux améliorations mesurées.

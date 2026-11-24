@@ -17,4 +17,6 @@ chromadb==1.5.9          # base vectorielle du RAG
 llama-index-core==0.14.26                # RAG : lecture, découpage et indexation des documents, recherche
 llama-index-vector-stores-chroma==0.7.0  # branche LlamaIndex sur la base Chroma
 llama-index-embeddings-ollama==0.11.0    # vectorise documents et questions avec le modèle d'embeddings d'Ollama
+pypdf==6.21.4            # extraction du texte des documents PDF du RAG
+beautifulsoup4==4.15.0   # extraction du texte des pages web du RAG 
 mlflow==3.18.0           # suivi des entraînements (paramètres, métriques, modèles sauvegardés) et traces de l'assistant, en local
