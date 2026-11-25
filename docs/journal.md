@@ -229,3 +229,50 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 - Pour le vrai code (src/) : le TP 19 demande aussi les fiches produits dans le corpus (une fiche = un morceau, documents longs découpés avec chevauchement). Décider si on les indexe avec LlamaIndex.
 - Tableau des sources et licences à écrire dans docs/ia/corpus.md (fichier attendu par le TP 19).
 - Jeu d'évaluation du TP 20 : 30 questions (factuelles, comparatives, 5 pièges hors périmètre) avec réponses et sources attendues, hit rate et MRR, deux améliorations mesurées.
+
+# 25/11/2026 - Lecture et découpage du corpus, reprise du corpus d'un collègue (TP 21)
+
+### Ce qui a été fait
+
+- Section 3.3 du notebook TP 21 : lecture des 5 documents (pages web avec beautifulsoup4, balise "main" seulement, PDF avec pypdf), un Document LlamaIndex par source avec ses métadonnées (source_id, titre, éditeur, URL, date de consultation, licence). URL, date et licence exclues de la vectorisation.
+- Cellule de contrôle du texte extrait : aucune page de PDF vide, mais beaucoup de bruit.
+- Section 3.4 : découpage avec SentenceSplitter (chunk_size 512, chunk_overlap 64), 154 morceaux.
+
+### Problèmes constatés
+
+- Bruit dans le texte extrait. En-tête du PDF PNNS répété 61 fois (une fois par page), en-tête du HCSP 9 fois, mots coupés par pypdf ("l eur", "nouv eaux"), sommaire du PNNS avec ses lignes de points, liens et listes d'autres articles dans la balise "main" des pages web ("En bref", "Lire l'article", "version française").
+- Corpus déséquilibré : le PNNS fournit 116 morceaux sur 154 (75 %).
+- Chevauchement irrégulier : 95 paires de morceaux consécutifs sur 149 se chevauchent. SentenceSplitter ne répète que des phrases entières, et le texte des pages web a beaucoup de lignes sans ponctuation.
+- Licence du HCSP : l'avis indique "Cet avis doit être diffusé dans sa totalité, sans ajout ni modification". À prendre en compte avant d'en citer des extraits.
+
+### Décision
+
+- Pas de nettoyage de notre extraction. On reprend le corpus d'un collègue, déjà fourni et correctement découpé. Raisons : nettoyer notre texte demanderait du travail (en-têtes, sommaire, menus, mots coupés) pour refaire ce qui existe déjà dans l'équipe, et un corpus plus fourni et propre donnera une recherche plus fiable que nos 5 documents bruts. Le temps gagné va à l'assistant lui-même (outils, agent, mémoire, journalisation).
+- Les sections 3.3 et 3.4 ont servi à comprendre la lecture et le découpage, et à mesurer ce qu'une extraction brute donne (un "avant" chiffré).
+
+### À reprendre
+
+- Vérifier le corpus du collègue : provenance et licence de chaque source, stratégie de découpage et sa justification (demandée au TP 19), métadonnées disponibles pour citer les sources (id, titre, URL, date).
+- Vérifier avec quel modèle d'embeddings il a été vectorisé, s'il l'a été : documents et questions doivent passer par le même modèle.
+- Décider quoi garder des sections 3.3 et 3.4 dans le notebook.
+- Si le corpus arrive déjà découpé en fichiers texte, pypdf et beautifulsoup4 ne servent peut-être plus : à retirer de requirements.txt et de CLAUDE.md le cas échéant.
+
+### Corpus du collègue (scan du 25/11)
+
+- 26 sources conservées (21 pages Manger Bouger, 1 page Santé publique France, 4 PDF), 407 morceaux propres en fichiers chunk_N.txt, un dossier par source. Le dossier "Non Conservés" (bilans du PNNS 4, rapport Igas) n'est pas à indexer, et un .zip fait doublon.
+- Le PNNS 5 (2026-2030) n'était découpé qu'en 2 morceaux, dont un de 184 602 caractères : source retirée du corpus plutôt que redécoupée.
+- Pas de chevauchement entre morceaux, et aucune métadonnée dans les fichiers (ni URL, ni date, ni licence) : il faudra le tableau des sources pour citer.
+- pypdf et beautifulsoup4 retirés de requirements.txt et de CLAUDE.md. Les cellules 3.3 et 3.4 du notebook restent comme démonstration, avec leurs sorties, mais ne se relancent plus (dépendances et fichiers retirés).
+
+### Stockage de Chroma (C1.2, bloc 2 : acquérir, stocker et analyser des données)
+
+- Phrase pour l'oral (critère "Les différents composants de l'architecture de l'entrepôt de données sont expliqués") : Chroma stocke les textes et les métadonnées dans SQLite, et les vecteurs dans un index HNSW à côté.
+- Sur le disque, en mode persistant : un fichier chroma.sqlite3 (collections, textes, métadonnées, identifiants) et un dossier par collection avec les fichiers .bin de l'index HNSW (graphe qui relie chaque vecteur à ses voisins proches, pour une recherche rapide mais approximative).
+- Mode persistant (comme SQLite, sans serveur, un seul programme à la fois) pour le notebook. Mode serveur dans docker-compose à envisager au déploiement (J6) si l'API et l'indexation doivent accéder à la base en même temps.
+
+### Avancement du notebook TP 21 (25/11)
+
+- passage au corpus du collègue (25 sources, 405 morceaux) qui est indexé dans Chroma "data/index_rag/". La recherche fonctionne : la question sur la charcuterie trouve deux sources qui donnent la réponse (150 g par semaine).
+- Piège noté : le connecteur Chroma de LlamaIndex rend exp(-distance), pas 1 - distance. On recalcule la similarité cosinus avec 1 + log
+- Reste : 3.7 (petite mesure, avec plusieurs sources attendues par question), 3.8 (search_docs), puis sections 4 à 8.
+- Toujours manquant : les fiches produits à mettre dans le RAG 
