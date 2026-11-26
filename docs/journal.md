@@ -96,11 +96,6 @@ Passé pour le moment.
     pas de colonnes _missing : les manquants sont traités dans le pipeline ML.
 - Les schémas JSON restent à côté de leurs données dans data/, hors Git.
 
-### À reprendre
-
-- Après l'EDA : revoir les requêtes du benchmark et docs/data/benchmark.md.
-- Après les TP 10, 13 et 14 : mettre à jour docs/architecture.md.
-
 # TP13 - Pipeline bout-en-bout
 
 ### Décisions
@@ -129,11 +124,6 @@ Passé pour le moment.
 - Reproductibilité : export du 10/11 refait dans un clone neuf, même SHA-256 que celui du 09/11 (avant le changement de split du 16/11).
 - README testé dans un clone neuf, manques corrigés.
 
-### À reprendre
-
-- docs/architecture.md : mettre à jour les commandes et les noms.
-- Script de téléchargement de food.parquet, hors pipeline.
-
 # TP 14 - Prédire le Nutri-Score (classification a→e)
 
 ### Synthèse
@@ -155,7 +145,7 @@ Features : nutriments, fibres, fruits-légumes, NOVA, additifs, rayons, 3 ratios
 
 ### Actions pour le TP 9
 
-Estimer les fruits-légumes à partir de la catégorie ; marquer comme suspect le grade d'une fiche dont l'énergie a été corrigée.
+Déplacé dans docs/todo.md le 26/11.
 Limite : les produits notés avec l'algorithme des boissons.
 
 # 16/11/2026 - Refactorisation de export_features.py
@@ -168,7 +158,7 @@ Objectif : modifier le fichier pour pouvoir l'expliquer plus simplement (détail
 - Requête SQL écrite en clair dans _build_query, parce qu'elle se lit d'un coup au lieu d'être assemblée par plusieurs fonctions.
 - Schéma allégé (plus de ratios plafonnés, de politique de manquants ni d'infos Git), parce que ces informations n'étaient pas demandées et compliquaient le code.
 
-### À reprendre
+### Conséquences à connaître
 
 - Le split a changé : un nouvel export n'aura plus le même SHA-256 que ceux du 09/11 et du 10/11.
 - La politique de manquants n'est plus dans le schéma : la lire dans cleaning.DEFAULT_MISSING_STRATEGY.
@@ -198,19 +188,6 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 - Avec un stockage SQLite, ajouter mlflow.db au .gitignore.
 - qwen3:8b produit beaucoup de tokens de sortie, même pour un simple appel d'outil (il raisonne avant de répondre) : piste pour réduire la latence.
 
-### À reprendre
-
-- src/ml : aucun modèle sauvegardé ni fonction de prédiction pour un seul produit. Entraînement final et sauvegarde à faire avec MLflow.
-- Mesurer la baisse du F1 macro quand les colonnes absentes d'une étiquette (nova_group, aisle, aisle2, peut-être fruits-légumes et additifs) sont mises à NaN. À faire sur une validation tirée du train, pas sur le test, pour garder le test neutre.
-- Vérifier si load_image (atelier scanner) supprime les EXIF au ré-encodage.
-- langsmith est installé automatiquement avec langchain : vérifier que LANGSMITH_TRACING n'est pas activé.
-- Rédiger une ADR sur les choix d'outils de l'assistant (LangChain, LlamaIndex, MLflow).
-- Reporter la justification des nouvelles librairies dans le README.
-- RAG : choisir entre tout indexer avec LlamaIndex (fiches et documents) ou garder les fiches dans rechercher().
-- Ajouter un lecteur de fichiers selon les formats du corpus (par exemple pypdf pour les PDF).
-- Noms des outils en anglais : écart au contrat du TP 18, qui impose chercher_produit à toutes les équipes. À signaler à la revue croisée.
-- Au déploiement (J6) : envisager un serveur MLflow dans docker-compose, avec ses données dans PostgreSQL, pour que l'API charge le modèle depuis ce serveur.
-
 # 24/11/2026 - Corpus du RAG et lecteurs de fichiers (TP 21)
 
 ### Décisions
@@ -219,16 +196,6 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 - Le tableau des sources (id, titre, éditeur, URL, dates, licence) sera versionné dans docs/ : il sert C1.2 (sources listées) et C5.5 (licences). Trois licences restent à vérifier (Santé.fr, Santé publique France).
 - llama-index-readers-file écarté : toutes ses versions récentes imposent pandas<3, ce qui aurait rétrogradé pandas 3.0.5 pour tout le projet (pipeline du bloc 2, pandera). À la place : pypdf pour les PDF et beautifulsoup4 pour les pages web (balise "main" seulement). Deux petites fonctions rendent des "Document" LlamaIndex, qui reste chargé du découpage, de l'indexation dans Chroma et de la recherche.
 - pypdf 6.21.4 et beautifulsoup4 4.15.0 installés, aucun conflit (pip check), pandas toujours en 3.0.5.
-
-### À reprendre
-
-- Télécharger les 5 documents dans data/corpus/ et remplir le tableau des sources.
-- Lire les conditions d'utilisation de Santé.fr et de Santé publique France avant d'indexer.
-- Vérifier pour chaque page que le contenu utile est bien dans la balise "main".
-- Section 3 du notebook TP 21 limitée aux 5 documents. Les fiches produits passent par l'outil search_product.
-- Pour le vrai code (src/) : le TP 19 demande aussi les fiches produits dans le corpus (une fiche = un morceau, documents longs découpés avec chevauchement). Décider si on les indexe avec LlamaIndex.
-- Tableau des sources et licences à écrire dans docs/ia/corpus.md (fichier attendu par le TP 19).
-- Jeu d'évaluation du TP 20 : 30 questions (factuelles, comparatives, 5 pièges hors périmètre) avec réponses et sources attendues, hit rate et MRR, deux améliorations mesurées.
 
 # 25/11/2026 - Lecture et découpage du corpus, reprise du corpus d'un collègue (TP 21)
 
@@ -250,13 +217,6 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 - Pas de nettoyage de notre extraction. On reprend le corpus d'un collègue, déjà fourni et correctement découpé. Raisons : nettoyer notre texte demanderait du travail (en-têtes, sommaire, menus, mots coupés) pour refaire ce qui existe déjà dans l'équipe, et un corpus plus fourni et propre donnera une recherche plus fiable que nos 5 documents bruts. Le temps gagné va à l'assistant lui-même (outils, agent, mémoire, journalisation).
 - Les sections 3.3 et 3.4 ont servi à comprendre la lecture et le découpage, et à mesurer ce qu'une extraction brute donne (un "avant" chiffré).
 
-### À reprendre
-
-- Vérifier le corpus du collègue : provenance et licence de chaque source, stratégie de découpage et sa justification (demandée au TP 19), métadonnées disponibles pour citer les sources (id, titre, URL, date).
-- Vérifier avec quel modèle d'embeddings il a été vectorisé, s'il l'a été : documents et questions doivent passer par le même modèle.
-- Décider quoi garder des sections 3.3 et 3.4 dans le notebook.
-- Si le corpus arrive déjà découpé en fichiers texte, pypdf et beautifulsoup4 ne servent peut-être plus : à retirer de requirements.txt et de CLAUDE.md le cas échéant.
-
 ### Corpus du collègue (scan du 25/11)
 
 - 26 sources conservées (21 pages Manger Bouger, 1 page Santé publique France, 4 PDF), 407 morceaux propres en fichiers chunk_N.txt, un dossier par source. Le dossier "Non Conservés" (bilans du PNNS 4, rapport Igas) n'est pas à indexer, et un .zip fait doublon.
@@ -274,5 +234,65 @@ Agent minimal (create_agent, ChatOpenAI branché sur qwen3:8b dans Ollama, un ou
 
 - passage au corpus du collègue (25 sources, 405 morceaux) qui est indexé dans Chroma "data/index_rag/". La recherche fonctionne : la question sur la charcuterie trouve deux sources qui donnent la réponse (150 g par semaine).
 - Piège noté : le connecteur Chroma de LlamaIndex rend exp(-distance), pas 1 - distance. On recalcule la similarité cosinus avec 1 + log
-- Reste : 3.7 (petite mesure, avec plusieurs sources attendues par question), 3.8 (search_docs), puis sections 4 à 8.
-- Toujours manquant : les fiches produits à mettre dans le RAG 
+- Suite du notebook : déplacé dans docs/todo.md le 26/11.
+
+# 26/11/2026 - Fiches produits dans le RAG (TP 21, section 3.7)
+
+### Fait
+
+- Modèle de fiche : "docs/template/product_card_light.md" (le modèle full est rangé à côté, non utilisé). Les accolades portent exactement les noms des colonnes du parquet nettoyé : la requête DuckDB lit ces noms dans le modèle, la requête et le modèle ne peuvent pas se désynchroniser.
+- Retirés du modèle : le code-barres et la source. Ils ne portent pas de sens et feraient du bruit dans le vecteur. Ils passent en métadonnées (avec la note et le groupe), exclues de l'embedding.
+- Échantillon de 1000 produits avec nom et Nutri-Score, tiré avec une graine ("REPEATABLE (42)"). Piège : le filtre doit être dans une sous-requête, sinon DuckDB tire avant de filtrer (876 produits au lieu de 1000). La graine ne garantit le même tirage que sur le même fichier : "find_input" prend la version datée la plus récente.
+- Fiches écrites dans "data/product_card/" (le dossier est vidé avant, il contient exactement ce qui est indexé), puis indexées dans une collection Chroma à part, "fiches_produits", avec des ids stables "fiche:{code}". Environ 30 s à 80 s selon la charge d'Ollama.
+- Valeurs manquantes écrites "non renseigné", jamais 0 : l'agent doit distinguer "absent" de "inconnu" (fibres manquantes sur 487 fiches sur 1000).
+
+### Résultats et choix justifiés
+
+- Deux collections séparées : sinon les fiches prendraient la place des documents dans le top 3 (521 000 fiches contre 405 morceaux dans le vrai code), et chaque outil cherche dans un seul type de contenu.
+- La note Nutri-Score est à la fois dans le texte (recherche par sens) et en métadonnée (filtre exact "uniquement des produits notés A").
+- Test : "spaghettis complets bio" et "yaourt nature" sont bien trouvés (0.76 et 0.66). "une pâte à tartiner moins sucrée" ramène des produits notés E : la similarité compare des sens, pas des nombres. "search_products" devra filtrer par métadonnée ou trier en SQL.
+
+### Phrases pour l'oral (26/11)
+
+- Code-barres : « Le code-barres ne porte pas de sens, donc je l'exclus du vecteur. Je le garde en métadonnée pour retrouver le produit exact. »
+- Identifiants : « Un id doit désigner la chose elle-même, pas sa position dans un tableau. C'est pour ça que j'utilise le code-barres et pas le numéro de ligne. »
+- Mise à jour : « Chaque fiche a un id stable basé sur le code-barres. Quand un produit change, je remplace seulement sa fiche (upsert), au lieu de tout revectoriser. »
+- Modèle de fiche : « Les colonnes sont lues dans le modèle, donc la requête et le modèle ne peuvent pas se désynchroniser. Une faute de frappe dans le modèle fait échouer la requête tout de suite. »
+- Injection SQL : « La requête est construite avec une f-string parce qu'un paramètre ne peut pas remplacer un nom de colonne. C'est sans risque ici, car les noms viennent de notre modèle et jamais de l'utilisateur. Les valeurs tapées par l'utilisateur passeront en paramètres. »
+- Graine : « La graine donne le même échantillon sur le même fichier. Si le parquet change, l'échantillon change aussi, donc je note le fichier lu à côté des résultats. »
+- Deux collections : « Je sépare les collections pour que les fiches ne prennent pas la place des documents dans les résultats, et pour que chaque outil cherche dans un seul type de contenu. »
+- Nutri-Score : « La note est dans le texte pour la recherche par sens, et en métadonnée pour pouvoir filtrer exactement. »
+- Valeurs manquantes : « Une valeur manquante est écrite "non renseigné" et jamais remplacée par 0, pour que l'agent distingue "absent" de "inconnu". »
+- Limite de la similarité : « La similarité compare des sens, pas des nombres. "Moins sucré" ne se trouve pas par similarité, il faut un filtre ou un tri. »
+- Recherche et réponse : « Je mesure séparément la recherche et la réponse. La 3.8 vérifie que la bonne source est retrouvée, les scénarios vérifient que l'agent l'utilise sans inventer. »
+- Portée de la mesure : « 100 % sur 4 questions ne prouve pas grand-chose. C'est un garde-fou qui signale une baisse si je change le modèle d'embeddings, le découpage ou les fiches. »
+- Questions de la mesure : « J'écris chaque question et sa réponse attendue avant de lancer le test. Si je les choisissais après avoir vu les résultats, je ne garderais que celles qui marchent, et la mesure ne mesurerait plus rien. »
+- Réponses attendues : « Je n'accepte que les sources qui répondent vraiment à la question posée. Accepter trop de sources gonfle le score. »
+
+### Mesure de la recherche (3.8) et suite
+
+- 3.8 faite : 3 questions par collection, écrites avec leur réponse attendue avant le test. Corpus 1.0, fiches 1.0 (sur "products_clean_20261116.parquet", graine 42). Question sur l'alcool corrigée ("le week-end" retiré, il rendait la limite par jour aussi valable).
+- Pas de chaîne de génération séparée : la réponse du modèle sera testée directement avec l'agent (scénarios de la section 7, dans docs/todo.md).
+- Chroma et la mémoire : « Chroma tourne sur le processeur et la RAM, pas sur la carte graphique. La VRAM est occupée par les modèles d'Ollama. La mémoire de Chroma dépend du nombre total de vecteurs (environ 4 Ko par vecteur de 1024 nombres), pas du nombre de collections. »
+- Deux collections et performances : « Séparer les collections ne coûte presque rien en mémoire. Le vrai gain est la qualité des résultats, la vitesse gagnée est faible. »
+- Fiches et drapeaux : « Les fiches viennent du parquet nettoyé, où une valeur manquante reste vide. Elle devient "non renseigné", ce qui revient au drapeau "_missing". Le remplacement par la médiane n'a lieu que dans le pipeline du modèle (SimpleImputer), jamais dans les fichiers : une valeur estimée est acceptable pour entraîner un modèle, pas pour informer un utilisateur. »
+
+### Drapeaux "_missing" redondants (nettoyage C3.2)
+- Phrase pour l'oral : « Je ne garde un drapeau que s'il apporte une information qu'un NULL ne donne pas, par exemple une valeur recalculée. Sinon, il fait doublon avec la case vide. »
+
+### Fonctions de recherche (3.9, 26/11)
+
+- "search_docs" et "search_products" rendent le format du TP 19 (id, score en similarité cosinus, texte, métadonnées). "search_products" accepte une note : filtre exact "MetadataFilters" sur "nutriscore_grade".
+- Piège constaté : avec un filtre, le retriever rend toujours k résultats, même hors sujet. "un yaourt nature" noté A rend des eaux minérales (score environ 0,5, contre 0,62 à 0,66 pour les vrais yaourts), parce que l'échantillon n'a aucun yaourt noté A.
+- Phrase pour l'oral : « Un retriever rend toujours les k plus proches, pas les k bons. Avec un filtre, il peut ne rester que des résultats hors sujet, donc l'agent doit vérifier la pertinence avant de répondre. »
+- Noms : "search_docs" et "search_products" renommées "rag_search_docs" et "rag_search_products", pour ne pas confondre avec "search_product" du TP 18, qui interroge la base à partir d'un code-barres ou d'un nom. Le préfixe dit que la recherche se fait par similarité dans Chroma.
+- Phrase pour l'oral (appel d'outil) : « L'utilisateur parle librement. C'est le modèle qui transforme sa phrase en appel d'outil avec les bons paramètres, à partir du nom, des paramètres et de la description de l'outil. Avec @tool, la docstring est envoyée au modèle : elle n'a plus seulement un rôle de documentation. »
+- Phrase pour l'oral (filtre et résultats hors sujet) : « Le filtre réduit d'abord les candidats aux fiches de la note demandée, puis la recherche prend les plus proches parmi elles. S'il n'existe aucun produit pertinent avec cette note, le retriever rend quand même des fiches, souvent rapprochées par un mot commun ("nature" et "naturelle", "pâte" et "pâtes"), avec un score bas. » Vérifié : 138 fiches notées A sur 1000, aucun yaourt ni aucune pâte à tartiner parmi elles.
+
+### Outil "search_product" (4.1, 26/11)
+
+- Vraie fonction plutôt qu'un placeholder : requête DuckDB sur le parquet nettoyé, au contrat "chercher_produit" du TP 18 (arguments "nom", "code", "limite", résultat "statut", "total", "produits"). Seul le nom de la fonction reste en anglais.
+- Testée : Nutella par code (ok), "comte AOP 6 mois" sans accent (ambigu, 19 produits), produit inexistant (introuvable), arguments invalides (erreur rendue, pas d'exception), tentative d'injection SQL (rien trouvé, la valeur passe en paramètre).
+- Phrase pour l'oral : « Les arguments écrits par le modèle sont des données non fiables. Je les vérifie avant toute requête, je renvoie une erreur lisible au lieu de lever une exception, et le nom et le code passent en paramètres pour empêcher l'injection SQL. »
+- Phrase pour l'oral : « "search_product" cherche par correspondance exacte (code ou nom), "rag_search_products" par similarité de sens. Le premier sert quand l'utilisateur connaît le produit, le second quand il le décrit. »
+- Phrase pour l'oral (f-string ou paramètre) : « "nom" et "limite" viennent tous les deux du modèle, donc aucun n'est fiable. "limite" peut aller dans la requête après vérification, parce que sa forme se contrôle complètement (un entier de 1 à 5). "nom" est un texte libre impossible à contrôler, il passe toujours en paramètre. Ce n'est pas l'origine qui décide, c'est la forme. »
